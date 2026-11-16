@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { UserStatus } from '../entities/user.entity.js';
+import { UserRole, UserStatus } from '../entities/user.entity.js';
 
 @Schema({ timestamps: true, collection: 'users' })
 export class UserRecord {
@@ -27,6 +27,14 @@ export class UserRecord {
     default: UserStatus.ACTIVE,
   })
   status: UserStatus;
+
+  @Prop({
+    type: String,
+    required: true,
+    enum: Object.values(UserRole),
+    default: UserRole.USER,
+  })
+  role: UserRole;
 
   createdAt: Date;
 

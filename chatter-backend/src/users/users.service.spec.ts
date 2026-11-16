@@ -38,7 +38,7 @@ describe('UsersService', () => {
       updatedAt: now,
     }));
 
-    const user = await service.create({
+    const user = await service.createAccount({
       email: '  USER@example.com ',
       password: 'secure-password',
       displayName: '  Example User ',
@@ -49,6 +49,7 @@ describe('UsersService', () => {
       email: 'user@example.com',
       displayName: 'Example User',
       status: 'active',
+      role: 'user',
       createdAt: now,
       updatedAt: now,
     });
@@ -85,7 +86,7 @@ describe('UsersService', () => {
       message: 'Display name must contain between 1 and 80 characters.',
     },
   ])('rejects invalid registration data', async ({ input, message }) => {
-    await expect(service.create(input)).rejects.toThrow(
+    await expect(service.createAccount(input)).rejects.toThrow(
       new BadRequestException(message),
     );
     expect(MockUserModel.saveMock).not.toHaveBeenCalled();
@@ -95,7 +96,7 @@ describe('UsersService', () => {
     MockUserModel.saveMock.mockRejectedValue({ code: 11000 });
 
     await expect(
-      service.create({
+      service.createAccount({
         email: 'user@example.com',
         password: 'secure-password',
         displayName: 'Example User',

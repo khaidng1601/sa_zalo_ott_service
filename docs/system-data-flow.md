@@ -196,6 +196,14 @@ Mặc định dùng khoảng thời gian và nhóm theo ngày; định nghĩa �
 
 ### Trạng thái triển khai tài khoản
 
-- Đã có schema MongoDB và mutation GraphQL `createUser` cho tự đăng ký; email được chuẩn hóa và mật khẩu được hash bằng scrypt trước khi lưu.
+- Đã có schema MongoDB và mutation GraphQL `register` cho tự đăng ký; email được chuẩn hóa và mật khẩu được hash bằng scrypt trước khi lưu.
 - GraphQL chỉ trả các trường công khai; `passwordHash` bị loại khỏi schema GraphQL và mặc định không được chọn từ MongoDB.
 - Các API liệt kê, cập nhật và vô hiệu hóa tài khoản chưa công khai cho tới khi có authentication và phân quyền quản trị.
+
+### Trạng thái triển khai authentication
+
+- Đăng ký/đăng nhập trả access token ký HMAC-SHA256, thời hạn 8 giờ; mật khẩu được kiểm tra bằng scrypt và so sánh constant-time.
+- Query `me` yêu cầu bearer token, kiểm tra tài khoản còn hoạt động từ MongoDB ở mỗi request; vai trò hệ thống `user`/`admin` đã có trong schema nhưng API quản trị/role guard chưa triển khai.
+- Web lưu access token trong `sessionStorage`, xác minh phiên trước khi mở Dashboard và cung cấp đăng xuất.
+- Backend cần biến `AUTH_JWT_SECRET` có tối thiểu 32 ký tự; CORS mặc định chỉ cho `http://localhost:3000` và có thể cấu hình qua `WEB_ORIGIN`.
+- Các API quản trị admin, nhóm, tin nhắn, media và thống kê vẫn là các bước tiếp theo.

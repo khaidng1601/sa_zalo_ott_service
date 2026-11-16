@@ -5,7 +5,13 @@ export enum UserStatus {
   DISABLED = 'disabled',
 }
 
+export enum UserRole {
+  USER = 'user',
+  ADMIN = 'admin',
+}
+
 registerEnumType(UserStatus, { name: 'UserStatus' });
+registerEnumType(UserRole, { name: 'UserRole' });
 
 @ObjectType()
 export class User {
@@ -23,6 +29,9 @@ export class User {
 
   @Field(() => UserStatus)
   status: UserStatus;
+
+  @Field(() => UserRole)
+  role: UserRole;
 
   @Field()
   createdAt: Date;

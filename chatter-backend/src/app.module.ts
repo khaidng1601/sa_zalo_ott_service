@@ -7,8 +7,9 @@ import { ConfigModule } from '@nestjs/config';
 import { DatabaseModule } from './common/database/database.module.js';
 import { GraphQLModule } from '@nestjs/graphql';
 import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
-import { UsersModule } from './users/users.module.js';
 import { AppResolver } from './app.resolver.js';
+import { AuthModule } from './auth/auth.module.js';
+import type { Request, Response } from 'express';
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
 
@@ -27,9 +28,13 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
       driver: ApolloDriver,
       autoSchemaFile: 'schema.gql',
       sortSchema: true,
+      context: (context: { req: Request; res: Response }) => ({
+        req: context.req,
+        res: context.res,
+      }),
     }),
     DatabaseModule,
-    UsersModule,
+    AuthModule,
   ],
   controllers: [AppController],
   providers: [AppService, AppResolver],

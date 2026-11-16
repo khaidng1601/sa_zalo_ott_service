@@ -23,6 +23,7 @@ import ChatRoundedIcon from "@mui/icons-material/ChatRounded";
 import DoneAllRoundedIcon from "@mui/icons-material/DoneAllRounded";
 import GroupsRoundedIcon from "@mui/icons-material/GroupsRounded";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
+import LogoutRoundedIcon from "@mui/icons-material/LogoutRounded";
 import MoreHorizRoundedIcon from "@mui/icons-material/MoreHorizRounded";
 import PeopleAltRoundedIcon from "@mui/icons-material/PeopleAltRounded";
 import PersonAddAltRoundedIcon from "@mui/icons-material/PersonAddAltRounded";
@@ -197,7 +198,7 @@ const loadConversations = (): Conversation[] => {
 
 type Section = "messages" | "contacts" | "groups";
 
-const Dashboard = () => {
+const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
   const isMobile = useMediaQuery("(max-width:760px)");
   const [conversations, setConversations] = useState(loadConversations);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -399,6 +400,17 @@ const Dashboard = () => {
             <SettingsRoundedIcon />
           </IconButton>
         </Tooltip>
+        {onLogout && (
+          <Tooltip title="Đăng xuất" placement="right">
+            <IconButton
+              aria-label="Đăng xuất"
+              onClick={onLogout}
+              sx={{ color: "white" }}
+            >
+              <LogoutRoundedIcon />
+            </IconButton>
+          </Tooltip>
+        )}
         <Avatar sx={{ width: 36, height: 36, mb: 1, bgcolor: "#f1b878", fontSize: 14 }}>
           AN
         </Avatar>

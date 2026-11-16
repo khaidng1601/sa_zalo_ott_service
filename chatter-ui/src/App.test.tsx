@@ -6,6 +6,8 @@ beforeEach(() => {
   window.localStorage.clear();
 });
 
+const renderDashboard = () => render(<Dashboard />);
+
 const clickButton = (label: string) => {
   const button = screen
     .getAllByLabelText(label)
@@ -15,7 +17,7 @@ const clickButton = (label: string) => {
 };
 
 test("shows conversations and sends a message", () => {
-  render(<Dashboard />);
+  renderDashboard();
 
   expect(screen.getByText("Tin nhắn")).toBeInTheDocument();
   expect(
@@ -31,7 +33,7 @@ test("shows conversations and sends a message", () => {
 });
 
 test("restores sent messages after the dashboard is remounted", async () => {
-  const firstRender = render(<Dashboard />);
+  const firstRender = renderDashboard();
   fireEvent.change(screen.getByLabelText("Nhập tin nhắn"), {
     target: { value: "Tin nhắn được lưu" },
   });
@@ -44,13 +46,13 @@ test("restores sent messages after the dashboard is remounted", async () => {
   });
 
   firstRender.unmount();
-  render(<Dashboard />);
+  renderDashboard();
 
   expect(screen.getByText("Tin nhắn được lưu")).toBeInTheDocument();
 });
 
 test("switches between contacts and groups", () => {
-  render(<Dashboard />);
+  renderDashboard();
 
   fireEvent.click(screen.getByLabelText("Danh bạ"));
   expect(screen.getByText("Khải Nguyễn")).toBeInTheDocument();
@@ -62,7 +64,7 @@ test("switches between contacts and groups", () => {
 });
 
 test("searches conversation names and message previews", () => {
-  render(<Dashboard />);
+  renderDashboard();
 
   fireEvent.change(screen.getByLabelText("Tìm kiếm cuộc trò chuyện"), {
     target: { value: "push code" },
