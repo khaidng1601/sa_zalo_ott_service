@@ -108,6 +108,21 @@ export class UsersService {
     return user ? this.toPublicUser(user) : null;
   }
 
+  async findActiveByEmail(emailInput: string): Promise<User | null> {
+    const email = emailInput.trim().toLowerCase();
+    if (
+      email.length > 254 ||
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+    ) {
+      return null;
+    }
+
+    const user = await this.userModel
+      .findOne({ email, status: UserStatus.ACTIVE })
+      .exec();
+    return user ? this.toPublicUser(user) : null;
+  }
+
   private toPublicUser(user: {
     id: string;
     email: string;

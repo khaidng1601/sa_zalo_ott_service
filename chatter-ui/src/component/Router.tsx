@@ -16,6 +16,7 @@ const ProtectedDashboard = () => {
     const navigate = useNavigate();
     const [isChecking, setIsChecking] = useState(true);
     const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const [currentUserId, setCurrentUserId] = useState("");
     const [requestError, setRequestError] = useState("");
     const [retryCount, setRetryCount] = useState(0);
 
@@ -31,8 +32,9 @@ const ProtectedDashboard = () => {
         graphqlRequest<{ me: { id: string } }>(
             "query CurrentUser { me { id } }",
         )
-            .then(() => {
+            .then(({ me }) => {
                 if (isMounted) {
+                    setCurrentUserId(me.id);
                     setIsAuthenticated(true);
                     setRequestError("");
                 }
@@ -90,6 +92,7 @@ const ProtectedDashboard = () => {
 
     return isAuthenticated ? (
         <Dashboard
+            currentUserId={currentUserId}
             onLogout={() => {
                 clearAccessToken();
                 navigate("/login", { replace: true });

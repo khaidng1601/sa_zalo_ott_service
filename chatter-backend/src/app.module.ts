@@ -9,6 +9,7 @@ import { GraphQLModule } from '@nestjs/graphql';
 import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
 import { AppResolver } from './app.resolver.js';
 import { AuthModule } from './auth/auth.module.js';
+import { ConversationsModule } from './conversations/conversations.module.js';
 import type { Request, Response } from 'express';
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
@@ -35,6 +36,7 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     }),
     DatabaseModule,
     AuthModule,
+    ConversationsModule,
   ],
   controllers: [AppController],
   providers: [AppService, AppResolver],

@@ -6,11 +6,16 @@ import { UserRecord } from './schemas/user.schema.js';
 
 class MockUserModel {
   static saveMock = vi.fn();
+  static findOneMock = vi.fn();
 
   constructor(private readonly data: Record<string, unknown>) {}
 
   save() {
     return MockUserModel.saveMock(this.data);
+  }
+
+  static findOne(filter: unknown) {
+    return MockUserModel.findOneMock(filter);
   }
 }
 
@@ -19,6 +24,7 @@ describe('UsersService', () => {
 
   beforeEach(async () => {
     MockUserModel.saveMock.mockReset();
+    MockUserModel.findOneMock.mockReset();
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         UsersService,
@@ -102,5 +108,34 @@ describe('UsersService', () => {
         displayName: 'Example User',
       }),
     ).rejects.toThrow(ConflictException);
+  });
+
+  it('looks up only active accounts by normalized email', async () => {
+    const now = new Date();
+    const user = {
+      id: 'user-id',
+      email: 'user@example.com',
+      displayName: 'Example User',
+      status: 'active',
+      role: 'user',
+      createdAt: now,
+      updatedAt: now,
+    };
+    MockUserModel.findOneMock.mockReturnValue({
+      exec: vi.fn().mockResolvedValue(user),
+    });
+
+    await expect(
+      service.findActiveByEmail(' USER@example.com '),
+    ).resolves.toMatchObject({ id: 'user-id', displayName: 'Example User' });
+    expect(MockUserModel.findOneMock).toHaveBeenCalledWith({
+      email: 'user@example.com',
+      status: 'active',
+    });
+  });
+
+  it('does not query MongoDB for an invalid email lookup', async () => {
+    await expect(service.findActiveByEmail('not-an-email')).resolves.toBeNull();
+    expect(MockUserModel.findOneMock).not.toHaveBeenCalled();
   });
 });

@@ -8,5 +8,6 @@ import { AuthTokenService } from './auth-token.service.js';
 @Module({
   imports: [UsersModule],
   providers: [AuthResolver, AuthService, AuthTokenService, AuthGuard],
+  exports: [AuthGuard, AuthService, AuthTokenService],
 })
 export class AuthModule {}

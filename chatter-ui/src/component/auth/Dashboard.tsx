@@ -1,9 +1,12 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
+  Alert,
   Avatar,
-  Badge,
   Box,
+  Badge,
   Button,
+  Chip,
+  CircularProgress,
   Divider,
   Dialog,
   DialogActions,
@@ -18,209 +21,104 @@ import {
 } from "@mui/material";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
-import AttachFileRoundedIcon from "@mui/icons-material/AttachFileRounded";
 import ChatRoundedIcon from "@mui/icons-material/ChatRounded";
-import DoneAllRoundedIcon from "@mui/icons-material/DoneAllRounded";
 import GroupsRoundedIcon from "@mui/icons-material/GroupsRounded";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import LogoutRoundedIcon from "@mui/icons-material/LogoutRounded";
-import MoreHorizRoundedIcon from "@mui/icons-material/MoreHorizRounded";
 import PeopleAltRoundedIcon from "@mui/icons-material/PeopleAltRounded";
 import PersonAddAltRoundedIcon from "@mui/icons-material/PersonAddAltRounded";
-import PhoneRoundedIcon from "@mui/icons-material/PhoneRounded";
+import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded";
 import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
-import SendRoundedIcon from "@mui/icons-material/SendRounded";
-import SentimentSatisfiedAltRoundedIcon from "@mui/icons-material/SentimentSatisfiedAltRounded";
 import SettingsRoundedIcon from "@mui/icons-material/SettingsRounded";
-import VideocamRoundedIcon from "@mui/icons-material/VideocamRounded";
+import { graphqlRequest } from "../../services/graphql";
 
-interface ChatMessage {
-  id: number;
-  text: string;
-  time: string;
-  isMine: boolean;
+interface ConversationMember {
+  userId: string;
+  displayName: string;
+  role: "OWNER" | "ADMIN" | "MEMBER";
 }
 
 interface Conversation {
-  id: number;
-  name: string;
-  initials: string;
-  color: string;
-  preview: string;
-  time: string;
-  unread: number;
-  online: boolean;
-  group: boolean;
-  messages: ChatMessage[];
+  id: string;
+  type: "DIRECT" | "GROUP";
+  title?: string | null;
+  createdBy: string;
+  createdAt: string;
+  members: ConversationMember[];
 }
 
-const initialConversations: Conversation[] = [
-  {
-    id: 1,
-    name: "KTPM_261",
-    initials: "KT",
-    color: "#7c66d8",
-    preview: "Khải: mình push code r nha",
-    time: "09:42",
-    unread: 2,
-    online: true,
-    group: true,
-    messages: [
-      { id: 1, text: "Hello mọi người đây là bản phân công cho mỗi người nhe", time: "09:30", isMine: false },
-      { id: 2, text: "Oke để mình làm thêm phần báo cáo", time: "09:34", isMine: true },
-      { id: 3, text: "mình push code r nha", time: "09:42", isMine: false },
-    ],
-  },
-  {
-    id: 2,
-    name: "Khải Nguyễn",
-    initials: "KN",
-    color: "#e49b65",
-    preview: "Tối nay mình gửi bạn lại tài liệu nha",
-    time: "09:18",
-    unread: 1,
-    online: true,
-    group: false,
-    messages: [
-      { id: 1, text: "Bạn xem giúp mình phần tài liệu với nhé.", time: "09:12", isMine: false },
-      { id: 2, text: "Được nha, mình đang xem đây.", time: "09:14", isMine: true },
-      { id: 3, text: "Tối nay mình gửi bạn lại tài liệu nha", time: "09:18", isMine: false },
-    ],
-  },
-  {
-    id: 3,
-    name: "Lan Phạm",
-    initials: "LP",
-    color: "#e97891",
-    preview: "Bạn: Mai qua chở ké tui được không",
-    time: "Hôm qua",
-    unread: 0,
-    online: false,
-    group: false,
-    messages: [
-      { id: 1, text: "Mai đi chơi hong", time: "16:20", isMine: false },
-      { id: 2, text: "Mai qua chở ké tui được không", time: "16:25", isMine: true },
-    ],
-  },
-  {
-    id: 4,
-    name: "Team IOT",
-    initials: "TI",
-    color: "#4b9b84",
-    preview: "Hoàng: Đã nhận được, cảm ơn cả nhà",
-    time: "T2",
-    unread: 0,
-    online: false,
-    group: true,
-    messages: [
-      { id: 1, text: "Mọi người nhớ cập nhật tiến độ trước thứ Sáu nhé.", time: "14:10", isMine: false },
-      { id: 2, text: "Đã nhận được, cảm ơn cả nhà", time: "14:16", isMine: false },
-    ],
-  },
-  {
-    id: 5,
-    name: "Huy Trần",
-    initials: "HT",
-    color: "#5886c6",
-    preview: "Đã gửi một ảnh",
-    time: "T3",
-    unread: 0,
-    online: false,
-    group: false,
-    messages: [
-      { id: 1, text: "Đã gửi một ảnh", time: "11:05", isMine: false },
-    ],
-  },
-  {
-    id: 6,
-    name: "Cộng đồng học tập",
-    initials: "CH",
-    color: "#ce8e4d",
-    preview: "Thu: Tài liệu mình để trong nhóm rồi nha",
-    time: "T3",
-    unread: 0,
-    online: false,
-    group: true,
-    messages: [
-      { id: 1, text: "Tài liệu mình để trong nhóm rồi nha", time: "10:44", isMine: false },
-    ],
-  },
-];
+interface UserProfile {
+  id: string;
+  displayName: string;
+}
 
-const CONVERSATIONS_STORAGE_KEY = "chatter.conversations";
+const getConversationName = (
+  conversation: Conversation,
+  currentUserId: string,
+) =>
+  conversation.type === "GROUP"
+    ? conversation.title || "Nhóm chưa đặt tên"
+    : conversation.members.find((member) => member.userId !== currentUserId)
+        ?.displayName ?? "Người dùng";
 
-const isChatMessage = (value: unknown): value is ChatMessage => {
-  if (typeof value !== "object" || value === null) return false;
-  const message = value as Record<string, unknown>;
-  return (
-    typeof message.id === "number" &&
-    typeof message.text === "string" &&
-    typeof message.time === "string" &&
-    typeof message.isMine === "boolean"
-  );
-};
-
-const isConversation = (value: unknown): value is Conversation => {
-  if (typeof value !== "object" || value === null) return false;
-  const conversation = value as Record<string, unknown>;
-  return (
-    typeof conversation.id === "number" &&
-    typeof conversation.name === "string" &&
-    typeof conversation.initials === "string" &&
-    typeof conversation.color === "string" &&
-    typeof conversation.preview === "string" &&
-    typeof conversation.time === "string" &&
-    typeof conversation.unread === "number" &&
-    typeof conversation.online === "boolean" &&
-    typeof conversation.group === "boolean" &&
-    Array.isArray(conversation.messages) &&
-    conversation.messages.every(isChatMessage)
-  );
-};
-
-const loadConversations = (): Conversation[] => {
-  if (process.env.NODE_ENV === "development") return initialConversations;
-
-  try {
-    const stored = window.localStorage.getItem(CONVERSATIONS_STORAGE_KEY);
-    if (stored === null) return initialConversations;
-
-    const parsed: unknown = JSON.parse(stored);
-    if (Array.isArray(parsed) && parsed.every(isConversation)) return parsed;
-
-    console.error("Saved conversations have an invalid format.");
-  } catch (error) {
-    console.error("Failed to load saved conversations:", error);
-  }
-
-  return initialConversations;
-};
+const getInitials = (name: string) =>
+  name
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toLocaleUpperCase("vi");
 
 type Section = "messages" | "contacts" | "groups";
 
-const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
+const Dashboard = ({
+  onLogout,
+  currentUserId,
+}: {
+  onLogout?: () => void;
+  currentUserId: string;
+}) => {
   const isMobile = useMediaQuery("(max-width:760px)");
-  const [conversations, setConversations] = useState(loadConversations);
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<"all" | "unread" | "groups">("all");
-  const [draft, setDraft] = useState("");
   const [activeSection, setActiveSection] = useState<Section>("messages");
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [newConversationName, setNewConversationName] = useState("");
+  const [createMode, setCreateMode] = useState<"direct" | "group">("direct");
+  const [recipientEmail, setRecipientEmail] = useState("");
+  const [groupTitle, setGroupTitle] = useState("");
+  const [selectedMembers, setSelectedMembers] = useState<UserProfile[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  const refreshConversations = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const data = await graphqlRequest<{ myConversations: Conversation[] }>(
+        `query MyConversations {
+          myConversations {
+            id type title createdBy createdAt
+            members { userId displayName role }
+          }
+        }`,
+      );
+      setConversations(data.myConversations);
+      setError("");
+    } catch (loadError) {
+      setError(
+        loadError instanceof Error
+          ? loadError.message
+          : "Không thể tải cuộc trò chuyện.",
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    if (process.env.NODE_ENV === "development") return;
-
-    try {
-      window.localStorage.setItem(
-        CONVERSATIONS_STORAGE_KEY,
-        JSON.stringify(conversations),
-      );
-    } catch (error) {
-      console.error("Failed to save conversations:", error);
-    }
-  }, [conversations]);
+    void refreshConversations();
+  }, [refreshConversations]);
 
   const navItems = [
     { id: "messages" as const, label: "Tin nhắn", icon: <ChatRoundedIcon /> },
@@ -228,24 +126,18 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
     { id: "groups" as const, label: "Nhóm", icon: <GroupsRoundedIcon /> },
   ];
 
-  const selectedConversation =
-    conversations.find((conversation) => conversation.id === selectedId) ??
-    (activeSection === "messages" ? conversations[0] : null);
+  const selectedConversation = conversations.find(
+    (conversation) => conversation.id === selectedId,
+  );
   const visibleConversations = conversations.filter((conversation) => {
+    const name = getConversationName(conversation, currentUserId);
     const searchText = search.toLocaleLowerCase("vi");
-    const matchesSearch =
-      conversation.name.toLocaleLowerCase("vi").includes(searchText) ||
-      conversation.preview.toLocaleLowerCase("vi").includes(searchText);
+    const matchesSearch = name.toLocaleLowerCase("vi").includes(searchText);
     const matchesSection =
       activeSection === "messages" ||
-      (activeSection === "contacts" && !conversation.group) ||
-      (activeSection === "groups" && conversation.group);
-    const matchesFilter =
-      activeSection !== "messages" ||
-      filter === "all" ||
-      (filter === "unread" && conversation.unread > 0) ||
-      (filter === "groups" && conversation.group);
-    return matchesSearch && matchesSection && matchesFilter;
+      (activeSection === "contacts" && conversation.type === "DIRECT") ||
+      (activeSection === "groups" && conversation.type === "GROUP");
+    return matchesSearch && matchesSection;
   });
   const showConversationList = !isMobile || selectedId === null;
   const sectionTitle =
@@ -257,74 +149,99 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
 
   const selectConversation = (conversation: Conversation) => {
     setSelectedId(conversation.id);
-    setConversations((current) =>
-      current.map((item) =>
-        item.id === conversation.id ? { ...item, unread: 0 } : item,
-      ),
-    );
   };
 
-  const startConversation = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const name = newConversationName.trim();
-    if (!name) return;
-
-    const conversation: Conversation = {
-      id: Date.now(),
-      name,
-      initials: name
-        .split(/\s+/)
-        .slice(0, 2)
-        .map((part) => part[0])
-        .join("")
-        .toLocaleUpperCase("vi"),
-      color: "#5886c6",
-      preview: "Bắt đầu cuộc trò chuyện",
-      time: "Vừa xong",
-      unread: 0,
-      online: false,
-      group: false,
-      messages: [],
-    };
-
-    setConversations((current) => [conversation, ...current]);
-    setActiveSection("messages");
-    setFilter("all");
-    setSearch("");
-    setSelectedId(conversation.id);
-    setNewConversationName("");
+  const resetCreateDialog = () => {
     setCreateDialogOpen(false);
+    setRecipientEmail("");
+    setGroupTitle("");
+    setSelectedMembers([]);
+    setCreateMode("direct");
+    setError("");
   };
 
-  const sendMessage = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const text = draft.trim();
-    if (!text || !selectedConversation) return;
-
-    setConversations((current) =>
-      current.map((conversation) =>
-        conversation.id === selectedConversation.id
-          ? {
-              ...conversation,
-              preview: `Bạn: ${text}`,
-              time: "Vừa xong",
-              messages: [
-                ...conversation.messages,
-                {
-                  id: Date.now(),
-                  text,
-                  time: new Date().toLocaleTimeString("vi-VN", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  }),
-                  isMine: true,
-                },
-              ],
-            }
-          : conversation,
-      ),
+  const lookupUser = async (email: string): Promise<UserProfile> => {
+    const data = await graphqlRequest<{ userByEmail: UserProfile | null }>(
+      "query UserByEmail($email: String!) { userByEmail(email: $email) { id displayName } }",
+      { email },
     );
-    setDraft("");
+    if (!data.userByEmail) throw new Error("Không tìm thấy tài khoản đang hoạt động với email này.");
+    if (data.userByEmail.id === currentUserId) {
+      throw new Error("Bạn không thể tạo cuộc trò chuyện với chính mình.");
+    }
+    return data.userByEmail;
+  };
+
+  const addSelectedMember = async () => {
+    const email = recipientEmail.trim();
+    if (!email) return;
+    setIsSubmitting(true);
+    setError("");
+    try {
+      const user = await lookupUser(email);
+      if (selectedMembers.some((member) => member.id === user.id)) {
+        throw new Error("Tài khoản này đã được thêm vào nhóm.");
+      }
+      if (selectedMembers.length >= 99) {
+        throw new Error("Nhóm có thể có tối đa 100 thành viên, bao gồm bạn.");
+      }
+      setSelectedMembers((members) => [...members, user]);
+      setRecipientEmail("");
+    } catch (lookupError) {
+      setError(
+        lookupError instanceof Error
+          ? lookupError.message
+          : "Không thể tìm tài khoản.",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const createConversation = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError("");
+    setIsSubmitting(true);
+    try {
+      let conversationId: string;
+      if (createMode === "direct") {
+        const user = await lookupUser(recipientEmail.trim());
+        const data = await graphqlRequest<{
+          openDirectConversation: { id: string };
+        }>(
+          "mutation OpenDirect($userId: String!) { openDirectConversation(userId: $userId) { id } }",
+          { userId: user.id },
+        );
+        conversationId = data.openDirectConversation.id;
+      } else {
+        if (!groupTitle.trim()) throw new Error("Vui lòng nhập tên nhóm.");
+        if (selectedMembers.length === 0) {
+          throw new Error("Hãy thêm ít nhất một thành viên vào nhóm.");
+        }
+        const data = await graphqlRequest<{ createGroup: { id: string } }>(
+          "mutation CreateGroup($input: CreateGroupInput!) { createGroup(input: $input) { id } }",
+          {
+            input: {
+              title: groupTitle.trim(),
+              memberIds: selectedMembers.map((member) => member.id),
+            },
+          },
+        );
+        conversationId = data.createGroup.id;
+      }
+      await refreshConversations();
+      setActiveSection("messages");
+      setSelectedId(conversationId);
+      resetCreateDialog();
+    } catch (createError) {
+      setError(
+        createError instanceof Error
+          ? createError.message
+          : "Không thể tạo cuộc trò chuyện.",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -376,7 +293,6 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
               onClick={() => {
                 setActiveSection(item.id);
                 setSelectedId(null);
-                setFilter("all");
               }}
               sx={{
                 width: 44,
@@ -453,6 +369,18 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
                 <AddRoundedIcon />
               </IconButton>
             </Tooltip>
+            <Tooltip title="Làm mới danh sách">
+              <span>
+                <IconButton
+                  aria-label="Làm mới cuộc trò chuyện"
+                  onClick={() => void refreshConversations()}
+                  disabled={isLoading}
+                  sx={{ color: "#63748a" }}
+                >
+                  {isLoading ? <CircularProgress size={20} /> : <RefreshRoundedIcon />}
+                </IconButton>
+              </span>
+            </Tooltip>
           </Box>
           <Box
             sx={{
@@ -476,49 +404,30 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
               sx={{ fontSize: 13.5, color: "#263445" }}
             />
           </Box>
-          {activeSection === "messages" && (
-            <Box sx={{ display: "flex", gap: 0.75, mt: 1.75 }}>
-              {([
-                ["all", "Tất cả"],
-                ["unread", "Chưa đọc"],
-                ["groups", "Nhóm"],
-              ] as const).map(([key, label]) => (
-              <Box
-                key={key}
-                component="button"
-                type="button"
-                onClick={() => setFilter(key)}
-                sx={{
-                  px: 1.25,
-                  py: 0.65,
-                  border: 0,
-                  borderRadius: 5,
-                  cursor: "pointer",
-                  font: "inherit",
-                  fontSize: 12,
-                  fontWeight: 600,
-                  color: filter === key ? "#075fe5" : "#7b8795",
-                  bgcolor: filter === key ? "#eaf2ff" : "transparent",
-                  "&:hover": { bgcolor: filter === key ? "#eaf2ff" : "#f4f6f9" },
-                }}
-              >
-                {label}
-              </Box>
-              ))}
-            </Box>
-          )}
         </Box>
 
         <Divider sx={{ borderColor: "#f0f2f5" }} />
         <Box sx={{ flex: 1, overflowY: "auto", px: 1, py: 0.75 }}>
-          {visibleConversations.length ? (
-            visibleConversations.map((conversation) => (
+          {error && (
+            <Alert severity="error" sx={{ mx: 1, my: 1 }} onClose={() => setError("")}>
+              {error}
+            </Alert>
+          )}
+          {isLoading && conversations.length === 0 ? (
+            <Box sx={{ display: "grid", placeItems: "center", py: 5 }}>
+              <CircularProgress size={26} aria-label="Đang tải cuộc trò chuyện" />
+            </Box>
+          ) : visibleConversations.length ? (
+            visibleConversations.map((conversation) => {
+              const name = getConversationName(conversation, currentUserId);
+              const initials = getInitials(name);
+              return (
               <Box
                 key={conversation.id}
                 component="button"
                 type="button"
                 onClick={() => selectConversation(conversation)}
-                aria-label={`Mở cuộc trò chuyện ${conversation.name}`}
+                aria-label={`Mở cuộc trò chuyện ${name}`}
                 sx={{
                   display: "flex",
                   width: "100%",
@@ -536,40 +445,33 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
               >
                 <Badge
                   overlap="circular"
-                  variant="dot"
-                  invisible={!conversation.online}
-                  anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-                  sx={{ "& .MuiBadge-badge": { bgcolor: "#31be76", boxShadow: "0 0 0 2px white" } }}
+                  badgeContent={conversation.type === "GROUP" ? <GroupsRoundedIcon sx={{ fontSize: 12 }} /> : null}
+                  invisible={conversation.type !== "GROUP"}
+                  sx={{ "& .MuiBadge-badge": { bgcolor: "#eaf2ff", color: "#0866ff", minWidth: 18, height: 18, borderRadius: 5 } }}
                 >
-                  <Avatar sx={{ width: 48, height: 48, bgcolor: conversation.color, fontSize: 14, fontWeight: 600 }}>
-                    {conversation.initials}
+                  <Avatar sx={{ width: 48, height: 48, bgcolor: conversation.type === "GROUP" ? "#7c66d8" : "#5886c6", fontSize: 14, fontWeight: 600 }}>
+                    {initials}
                   </Avatar>
                 </Badge>
                 <Box sx={{ minWidth: 0, flex: 1 }}>
                   <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1 }}>
-                    <Typography noWrap sx={{ color: "#263445", fontSize: 13.5, fontWeight: conversation.unread ? 700 : 600 }}>
-                      {conversation.name}
+                    <Typography noWrap sx={{ color: "#263445", fontSize: 13.5, fontWeight: 600 }}>
+                      {name}
                     </Typography>
                     <Typography sx={{ color: "#9aa4b1", whiteSpace: "nowrap", fontSize: 10.5 }}>
-                      {conversation.time}
+                      {new Date(conversation.createdAt).toLocaleDateString("vi-VN")}
                     </Typography>
                   </Box>
-                  <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1, mt: 0.55 }}>
-                    <Typography noWrap sx={{ color: conversation.unread ? "#516071" : "#929dab", fontSize: 12 }}>
-                      {conversation.preview}
-                    </Typography>
-                    {conversation.unread > 0 && (
-                      <Box sx={{ minWidth: 18, height: 18, px: 0.5, display: "grid", placeItems: "center", borderRadius: 5, bgcolor: "#0866ff", color: "white", fontSize: 10, fontWeight: 700 }}>
-                        {conversation.unread}
-                      </Box>
-                    )}
-                  </Box>
+                  <Typography noWrap sx={{ color: "#929dab", fontSize: 12, mt: 0.55 }}>
+                    {conversation.type === "GROUP" ? `${conversation.members.length} thành viên` : "Chat riêng"}
+                  </Typography>
                 </Box>
               </Box>
-            ))
+              );
+            })
           ) : (
             <Typography sx={{ px: 2, py: 4, textAlign: "center", color: "#8995a3", fontSize: 13 }}>
-              Không tìm thấy cuộc trò chuyện
+              {search ? "Không tìm thấy cuộc trò chuyện" : activeSection === "groups" ? "Bạn chưa tham gia nhóm nào." : "Chưa có cuộc trò chuyện. Nhấn + để bắt đầu."}
             </Typography>
           )}
         </Box>
@@ -608,37 +510,21 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
                   <ArrowBackRoundedIcon />
                 </IconButton>
               )}
-              <Avatar sx={{ width: 42, height: 42, bgcolor: selectedConversation.color, fontSize: 13, fontWeight: 600 }}>
-                {selectedConversation.initials}
+              <Avatar sx={{ width: 42, height: 42, bgcolor: selectedConversation.type === "GROUP" ? "#7c66d8" : "#5886c6", fontSize: 13, fontWeight: 600 }}>
+                {getInitials(getConversationName(selectedConversation, currentUserId))}
               </Avatar>
               <Box sx={{ minWidth: 0, flex: 1 }}>
                 <Typography noWrap sx={{ color: "#263445", fontSize: 14.5, fontWeight: 700 }}>
-                  {selectedConversation.name}
+                  {getConversationName(selectedConversation, currentUserId)}
                 </Typography>
-                <Box sx={{ display: "flex", alignItems: "center", gap: 0.6, mt: 0.25 }}>
-                  <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: selectedConversation.online ? "#31be76" : "#b4bdc8" }} />
-                  <Typography sx={{ color: "#8b97a5", fontSize: 11.5 }}>
-                    {selectedConversation.group ? "Cuộc trò chuyện nhóm" : selectedConversation.online ? "Đang hoạt động" : "Ngoại tuyến"}
-                  </Typography>
-                </Box>
+                <Typography sx={{ color: "#8b97a5", fontSize: 11.5, mt: 0.25 }}>
+                  {selectedConversation.type === "GROUP"
+                    ? `${selectedConversation.members.length} thành viên`
+                    : "Chat riêng"}
+                </Typography>
               </Box>
-              <Tooltip title="Gọi thoại">
-                <IconButton aria-label="Gọi thoại" sx={{ color: "#647386" }}>
-                  <PhoneRoundedIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-              <Tooltip title="Gọi video">
-                <IconButton aria-label="Gọi video" sx={{ color: "#647386", display: { xs: "none", sm: "inline-flex" } }}>
-                  <VideocamRoundedIcon />
-                </IconButton>
-              </Tooltip>
-              <Tooltip title="Thông tin cuộc trò chuyện">
-                <IconButton aria-label="Thông tin cuộc trò chuyện" sx={{ color: "#647386" }}>
-                  <InfoOutlinedIcon />
-                </IconButton>
-              </Tooltip>
-              <IconButton aria-label="Tùy chọn" sx={{ color: "#647386", display: { xs: "none", sm: "inline-flex" } }}>
-                <MoreHorizRoundedIcon />
+              <IconButton aria-label="Làm mới cuộc trò chuyện" onClick={() => void refreshConversations()} sx={{ color: "#647386" }}>
+                <InfoOutlinedIcon />
               </IconButton>
             </Box>
 
@@ -654,117 +540,29 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
                 gap: 1.5,
               }}
             >
-              <Box sx={{ display: "flex", justifyContent: "center", mb: 1 }}>
-                <Typography sx={{ px: 1.5, py: 0.6, borderRadius: 5, bgcolor: "#edf0f4", color: "#929dab", fontSize: 10.5 }}>
-                  HÔM NAY
-                </Typography>
-              </Box>
-              {selectedConversation.messages.length === 0 && (
-                <Box sx={{ flex: 1, display: "grid", placeItems: "center", color: "#8c98a7", textAlign: "center" }}>
-                  <Box>
-                    <ChatRoundedIcon sx={{ fontSize: 38, color: "#b7c8df", mb: 1 }} />
-                    <Typography sx={{ fontWeight: 600, fontSize: 14 }}>Bắt đầu cuộc trò chuyện</Typography>
-                    <Typography sx={{ fontSize: 12.5, mt: 0.5 }}>Gửi lời chào đầu tiên đến {selectedConversation.name}.</Typography>
-                  </Box>
-                </Box>
-              )}
-              {selectedConversation.messages.map((message) => (
-                <Box
-                  key={message.id}
-                  sx={{
-                    display: "flex",
-                    justifyContent: message.isMine ? "flex-end" : "flex-start",
-                    alignItems: "flex-end",
-                    gap: 1,
-                  }}
-                >
-                  {!message.isMine && (
-                    <Avatar sx={{ width: 28, height: 28, mb: 0.25, bgcolor: selectedConversation.color, fontSize: 9.5 }}>
-                      {selectedConversation.initials}
-                    </Avatar>
-                  )}
-                  <Box
-                    sx={{
-                      maxWidth: { xs: "82%", sm: "70%" },
-                      px: 1.8,
-                      py: 1.15,
-                      borderRadius: message.isMine ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
-                      bgcolor: message.isMine ? "#0866ff" : "#fff",
-                      color: message.isMine ? "#fff" : "#354254",
-                      boxShadow: "0 1px 2px rgba(34,48,68,.06)",
-                    }}
-                  >
-                    <Typography sx={{ fontSize: 13.5, lineHeight: 1.55, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
-                      {message.text}
-                    </Typography>
-                    <Box sx={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 0.4, mt: 0.45 }}>
-                      <Typography sx={{ fontSize: 10, color: message.isMine ? "rgba(255,255,255,.72)" : "#a3adba" }}>
-                        {message.time}
-                      </Typography>
-                      {message.isMine && (
-                        <DoneAllRoundedIcon sx={{ fontSize: 13, color: "rgba(255,255,255,.8)" }} />
-                      )}
+              <Box sx={{ flex: 1, display: "grid", placeItems: "center", color: "#8c98a7", textAlign: "center" }}>
+                <Box>
+                  <ChatRoundedIcon sx={{ fontSize: 42, color: "#b7c8df", mb: 1 }} />
+                  <Typography sx={{ fontWeight: 600, fontSize: 14 }}>
+                    {selectedConversation.type === "GROUP" ? "Nhóm đã sẵn sàng" : "Cuộc trò chuyện đã sẵn sàng"}
+                  </Typography>
+                  <Typography sx={{ fontSize: 12.5, mt: 0.5 }}>
+                    Tính năng gửi tin nhắn sẽ được kết nối ở bước tiếp theo.
+                  </Typography>
+                  {selectedConversation.type === "GROUP" && (
+                    <Box sx={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 1, mt: 2 }}>
+                      {selectedConversation.members.map((member) => (
+                        <Chip
+                          key={member.userId}
+                          avatar={<Avatar>{getInitials(member.displayName)}</Avatar>}
+                          label={`${member.displayName}${member.role === "OWNER" ? " · Chủ nhóm" : member.role === "ADMIN" ? " · Quản trị viên" : ""}`}
+                          size="small"
+                        />
+                      ))}
                     </Box>
-                  </Box>
+                  )}
                 </Box>
-              ))}
-            </Box>
-
-            <Box
-              component="form"
-              onSubmit={sendMessage}
-              sx={{
-                mx: { xs: 1, sm: 2.5 },
-                mb: { xs: 1, sm: 2 },
-                px: 1.25,
-                py: 1,
-                display: "flex",
-                alignItems: "flex-end",
-                gap: 0.5,
-                border: "1px solid #e5eaf0",
-                borderRadius: 3,
-                bgcolor: "#fff",
-                boxShadow: "0 4px 16px rgba(36,54,78,.04)",
-              }}
-            >
-              <Tooltip title="Đính kèm tệp">
-                <IconButton type="button" aria-label="Đính kèm tệp" sx={{ color: "#7b8a9b" }}>
-                  <AttachFileRoundedIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-              <InputBase
-                fullWidth
-                value={draft}
-                onChange={(event) => setDraft(event.target.value)}
-                placeholder="Nhập tin nhắn..."
-                inputProps={{ "aria-label": "Nhập tin nhắn" }}
-                sx={{ px: 0.5, py: 0.8, fontSize: 13.5, color: "#263445" }}
-              />
-              <Tooltip title="Biểu tượng cảm xúc">
-                <IconButton type="button" aria-label="Biểu tượng cảm xúc" sx={{ color: "#7b8a9b", display: { xs: "none", sm: "inline-flex" } }}>
-                  <SentimentSatisfiedAltRoundedIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-              <Tooltip title="Gửi tin nhắn">
-                <span>
-                  <IconButton
-                    type="submit"
-                    aria-label="Gửi tin nhắn"
-                    disabled={!draft.trim()}
-                    sx={{
-                      width: 38,
-                      height: 38,
-                      color: "white",
-                      bgcolor: "#0866ff",
-                      borderRadius: 2.5,
-                      "&:hover": { bgcolor: "#0059e6" },
-                      "&.Mui-disabled": { bgcolor: "#e8edf3", color: "#a5afbb" },
-                    }}
-                  >
-                    <SendRoundedIcon sx={{ fontSize: 18 }} />
-                  </IconButton>
-                </span>
-              </Tooltip>
+              </Box>
             </Box>
           </>
         ) : (
@@ -780,37 +578,90 @@ const Dashboard = ({ onLogout }: { onLogout?: () => void }) => {
 
       <Dialog
         open={createDialogOpen}
-        onClose={() => setCreateDialogOpen(false)}
+        onClose={resetCreateDialog}
         fullWidth
-        maxWidth="xs"
+        maxWidth="sm"
       >
-        <Box component="form" onSubmit={startConversation}>
-          <DialogTitle sx={{ pb: 1 }}>Cuộc trò chuyện mới</DialogTitle>
+        <Box component="form" onSubmit={createConversation}>
+          <DialogTitle sx={{ pb: 1 }}>Tạo cuộc trò chuyện</DialogTitle>
           <DialogContent>
-            <Typography sx={{ mb: 2, color: "#7b8795", fontSize: 13 }}>
-              Nhập tên người bạn muốn bắt đầu trò chuyện.
-            </Typography>
-            <TextField
-              autoFocus
-              fullWidth
-              label="Tên người nhận"
-              value={newConversationName}
-              onChange={(event) => setNewConversationName(event.target.value)}
-              slotProps={{ htmlInput: { maxLength: 80 } }}
-              required
-            />
+            <Box sx={{ display: "flex", gap: 1, mb: 2 }}>
+              <Button type="button" aria-label="Chuyển sang chat riêng" variant={createMode === "direct" ? "contained" : "outlined"} onClick={() => { setCreateMode("direct"); setError(""); }}>
+                Chat riêng
+              </Button>
+              <Button type="button" aria-label="Chuyển sang tạo nhóm" variant={createMode === "group" ? "contained" : "outlined"} onClick={() => { setCreateMode("group"); setError(""); }}>
+                Tạo nhóm
+              </Button>
+            </Box>
+            {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+            {createMode === "group" && (
+              <TextField
+                autoFocus
+                fullWidth
+                label="Tên nhóm"
+                value={groupTitle}
+                onChange={(event) => setGroupTitle(event.target.value)}
+                slotProps={{ htmlInput: { maxLength: 80, "aria-label": "Tên nhóm" } }}
+                sx={{ mb: 2 }}
+                required
+              />
+            )}
+            <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1 }}>
+              <TextField
+                fullWidth
+                autoFocus={createMode === "direct"}
+                type="email"
+                label="Email người dùng"
+                value={recipientEmail}
+                onChange={(event) => setRecipientEmail(event.target.value)}
+                slotProps={{ htmlInput: { maxLength: 254 } }}
+                onKeyDown={(event) => {
+                  if (createMode === "group" && event.key === "Enter") {
+                    event.preventDefault();
+                    void addSelectedMember();
+                  }
+                }}
+              />
+              {createMode === "group" && (
+                <Button
+                  type="button"
+                  variant="outlined"
+                  onClick={() => void addSelectedMember()}
+                  disabled={!recipientEmail.trim() || isSubmitting}
+                  sx={{ minHeight: 56, whiteSpace: "nowrap" }}
+                >
+                  Thêm
+                </Button>
+              )}
+            </Box>
+            {selectedMembers.length > 0 && (
+              <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mt: 2 }}>
+                {selectedMembers.map((member) => (
+                  <Chip
+                    key={member.id}
+                    label={member.displayName}
+                    onDelete={() => setSelectedMembers((members) => members.filter((item) => item.id !== member.id))}
+                  />
+                ))}
+              </Box>
+            )}
           </DialogContent>
           <DialogActions sx={{ px: 3, pb: 2.5 }}>
-            <Button onClick={() => setCreateDialogOpen(false)} color="inherit">
+            <Button onClick={resetCreateDialog} color="inherit">
               Hủy
             </Button>
             <Button
               type="submit"
               variant="contained"
-              startIcon={<PersonAddAltRoundedIcon />}
-              disabled={!newConversationName.trim()}
+              aria-label={createMode === "direct" ? "Mở chat" : "Tạo nhóm ngay"}
+              startIcon={isSubmitting ? <CircularProgress size={18} color="inherit" /> : <PersonAddAltRoundedIcon />}
+              disabled={
+                isSubmitting ||
+                (createMode === "direct" && !recipientEmail.trim()) ||
+                (createMode === "group" && (!groupTitle.trim() || selectedMembers.length === 0))
+              }
             >
-              Bắt đầu chat
+              {createMode === "direct" ? "Mở chat" : "Tạo nhóm"}
             </Button>
           </DialogActions>
         </Box>

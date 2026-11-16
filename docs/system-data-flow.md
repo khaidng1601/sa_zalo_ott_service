@@ -207,3 +207,11 @@ Mặc định dùng khoảng thời gian và nhóm theo ngày; định nghĩa �
 - Web lưu access token trong `sessionStorage`, xác minh phiên trước khi mở Dashboard và cung cấp đăng xuất.
 - Backend cần biến `AUTH_JWT_SECRET` có tối thiểu 32 ký tự; CORS mặc định chỉ cho `http://localhost:3000` và có thể cấu hình qua `WEB_ORIGIN`.
 - Các API quản trị admin, nhóm, tin nhắn, media và thống kê vẫn là các bước tiếp theo.
+
+### Trạng thái triển khai conversation và nhóm
+
+- Đã có collection MongoDB `conversations` và `conversationMembers`, unique direct key để mở/tạo chat riêng idempotent, membership role/status và index truy vấn.
+- GraphQL đã có query `myConversations`, `conversationMembers`; mutation `openDirectConversation`, `createGroup`, `addGroupMember`, `removeGroupMember`, `setGroupAdmin` và `leaveGroup`. Tất cả đều yêu cầu đăng nhập.
+- Chỉ thành viên đang hoạt động mới xem danh sách thành viên; chỉ owner/admin được thêm hoặc xóa thành viên; chỉ owner đổi admin; owner không thể rời hoặc bị xóa trước khi chuyển quyền sở hữu.
+- Dashboard tải danh sách hội thoại và thành viên từ API; có thể mở chat riêng theo email hoặc tạo nhóm bằng cách chọn tài khoản theo email. Danh sách không còn dùng dữ liệu mẫu/localStorage.
+- Tin nhắn, gửi tệp, realtime, quản lý thành viên từ giao diện và chức năng tìm kiếm danh bạ vẫn chưa triển khai; màn hình hội thoại thông báo rõ tin nhắn chưa sẵn sàng.
