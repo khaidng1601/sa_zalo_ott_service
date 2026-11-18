@@ -6,3 +6,6 @@ node_modules/
 dist/
 build/
 uploads/
+*.pem
+*.tar.gz
+.aws-deploy/

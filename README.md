@@ -145,7 +145,33 @@ docker run --rm -e CI=true chatter-ui-test npx react-scripts test --watchAll=fal
 
 ---
 
-## 3. Deploying on AWS EC2 (Lift-and-Shift Guide)
+## 3. Deploying on AWS EC2 (Automated & Manual Guides)
+
+### Option A: Fully Automated 1-Command AWS Provisioning & Deployment (Windows PowerShell)
+
+Once you have configured AWS CLI (`aws configure`), run from the repository root:
+
+```powershell
+# Automatically creates VPC Security Group, SSH Key Pair, Free-Tier Ubuntu 24.04 EC2 instance,
+# 2GB swap, Docker Engine, and deploys the full production stack on ports 80 & 3000:
+powershell -ExecutionPolicy Bypass -File .\scripts\provision-and-deploy-ec2.ps1 -Region ap-southeast-1
+```
+
+If you already have a running Ubuntu EC2 instance and `.pem` key:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\deploy-to-ec2.ps1 -HostIp <EC2_PUBLIC_IP> -KeyPath <PATH_TO_KEY.pem>
+```
+
+When your class demo is finished and you want to tear down all AWS resources (`$0` ongoing cost):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\destroy-ec2.ps1 -Region ap-southeast-1
+```
+
+---
+
+### Option B: Manual Step-by-Step Guide (Ubuntu EC2 Console)
 
 ### Step 1: Launch EC2 Instance & Configure Security Group
 1. Launch an **Ubuntu Server 24.04 LTS** EC2 instance:
