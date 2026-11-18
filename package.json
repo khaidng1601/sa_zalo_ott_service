@@ -1,0 +1,16 @@
+{
+  "name": "sa_zalo_ott_service",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Zalo-inspired OTT messaging service (NestJS + GraphQL + MongoDB + React)",
+  "scripts": {
+    "docker:up": "docker compose up -d --build",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f",
+    "test:backend": "npm --prefix chatter-backend test",
+    "test:ui": "npm --prefix chatter-ui test -- --watchAll=false"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
