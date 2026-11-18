@@ -25,6 +25,9 @@ export class ConversationRecord {
   @Prop({ type: Date, default: null })
   lastMessageAt?: Date;
 
+  @Prop({ type: String, trim: true, maxlength: 200, default: null })
+  lastMessagePreview?: string;
+
   @Prop({ type: Date, default: null })
   closedAt?: Date;
 

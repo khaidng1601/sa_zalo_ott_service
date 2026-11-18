@@ -36,6 +36,9 @@ export class UserRecord {
   })
   role: UserRole;
 
+  @Prop({ type: Date, default: null })
+  lastSeenAt?: Date;
+
   createdAt: Date;
 
   updatedAt: Date;

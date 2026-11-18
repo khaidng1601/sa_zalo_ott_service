@@ -2,18 +2,21 @@ import { UseGuards } from '@nestjs/common';
 import {
   Args,
   Context,
+  Int,
   Mutation,
   Parent,
   Query,
   ResolveField,
   Resolver,
 } from '@nestjs/graphql';
-import { User } from '../users/entities/user.entity.js';
+import { AdminGuard } from '../auth/admin.guard.js';
 import { AuthGuard } from '../auth/auth.guard.js';
+import { User, UserRole } from '../users/entities/user.entity.js';
 import { CreateGroupInput } from './dto/create-group.input.js';
 import {
   Conversation,
   ConversationMember,
+  ConversationType,
 } from './entities/conversation.entity.js';
 import { ConversationsService } from './conversations.service.js';
 
@@ -38,9 +41,11 @@ export class ConversationsResolver {
     @Parent() conversation: Conversation,
     @Context() context: ConversationGraphQLContext,
   ): Promise<ConversationMember[]> {
+    const user = this.currentUser(context);
     return this.conversationsService.listMembers(
-      this.currentUser(context).id,
+      user.id,
       conversation.id,
+      user.role === UserRole.ADMIN,
     );
   }
 
@@ -49,9 +54,11 @@ export class ConversationsResolver {
     @Context() context: ConversationGraphQLContext,
     @Args('conversationId') conversationId: string,
   ): Promise<ConversationMember[]> {
+    const user = this.currentUser(context);
     return this.conversationsService.listMembers(
-      this.currentUser(context).id,
+      user.id,
       conversationId,
+      user.role === UserRole.ADMIN,
     );
   }
 
@@ -75,6 +82,19 @@ export class ConversationsResolver {
       this.currentUser(context).id,
       input.title,
       input.memberIds,
+    );
+  }
+
+  @Mutation(() => Conversation)
+  updateGroupTitle(
+    @Context() context: ConversationGraphQLContext,
+    @Args('conversationId') conversationId: string,
+    @Args('title') title: string,
+  ): Promise<Conversation> {
+    return this.conversationsService.updateGroupTitle(
+      this.currentUser(context).id,
+      conversationId,
+      title,
     );
   }
 
@@ -120,6 +140,19 @@ export class ConversationsResolver {
   }
 
   @Mutation(() => ConversationMember)
+  transferGroupOwnership(
+    @Context() context: ConversationGraphQLContext,
+    @Args('conversationId') conversationId: string,
+    @Args('newOwnerId') newOwnerId: string,
+  ): Promise<ConversationMember> {
+    return this.conversationsService.transferGroupOwnership(
+      this.currentUser(context).id,
+      conversationId,
+      newOwnerId,
+    );
+  }
+
+  @Mutation(() => ConversationMember)
   leaveGroup(
     @Context() context: ConversationGraphQLContext,
     @Args('conversationId') conversationId: string,
@@ -127,6 +160,48 @@ export class ConversationsResolver {
     return this.conversationsService.leaveGroup(
       this.currentUser(context).id,
       conversationId,
+    );
+  }
+
+  @Mutation(() => Boolean)
+  markConversationRead(
+    @Context() context: ConversationGraphQLContext,
+    @Args('conversationId') conversationId: string,
+  ): Promise<boolean> {
+    return this.conversationsService.markConversationRead(
+      this.currentUser(context).id,
+      conversationId,
+    );
+  }
+
+  @UseGuards(AuthGuard, AdminGuard)
+  @Query(() => [Conversation])
+  adminConversations(
+    @Args('search', { nullable: true }) search?: string,
+    @Args('type', { type: () => ConversationType, nullable: true })
+    type?: ConversationType,
+    @Args('includeClosed', { nullable: true, defaultValue: true })
+    includeClosed?: boolean,
+    @Args('limit', { type: () => Int, nullable: true, defaultValue: 50 })
+    limit?: number,
+  ): Promise<Conversation[]> {
+    return this.conversationsService.adminListConversations({
+      search,
+      type,
+      includeClosed: includeClosed ?? true,
+      limit: limit ?? 50,
+    });
+  }
+
+  @UseGuards(AuthGuard, AdminGuard)
+  @Mutation(() => Conversation)
+  adminSetConversationClosed(
+    @Args('conversationId') conversationId: string,
+    @Args('closed') closed: boolean,
+  ): Promise<Conversation> {
+    return this.conversationsService.adminSetConversationClosed(
+      conversationId,
+      closed,
     );
   }
 

@@ -1,5 +1,5 @@
 const GRAPHQL_URL =
-  process.env.REACT_APP_GRAPHQL_URL ?? "http://localhost:4000/graphql";
+  process.env.REACT_APP_GRAPHQL_URL?.trim() || "/graphql";
 const AUTH_TOKEN_KEY = "chatter.accessToken";
 
 interface GraphQLResponse<T> {

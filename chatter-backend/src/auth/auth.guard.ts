@@ -10,7 +10,7 @@ import { AuthService } from './auth.service.js';
 import { AuthTokenService } from './auth-token.service.js';
 import { User } from '../users/entities/user.entity.js';
 
-interface GraphQLRequest {
+export interface AuthenticatedRequest {
   headers?: { authorization?: string };
   user?: User;
 }
@@ -23,16 +23,20 @@ export class AuthGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const gqlContext =
-      GqlExecutionContext.create(context).getContext<{ req: GraphQLRequest }>();
-    const request = gqlContext.req;
+    const request: AuthenticatedRequest | undefined =
+      context.getType() === 'http'
+        ? context.switchToHttp().getRequest<AuthenticatedRequest>()
+        : GqlExecutionContext.create(context).getContext<{
+            req: AuthenticatedRequest;
+          }>()?.req;
+
     const authorization = request?.headers?.authorization;
     const match =
       typeof authorization === 'string'
         ? /^Bearer ([^\s]+)$/.exec(authorization)
         : null;
 
-    if (!match) {
+    if (!match || !request) {
       throw new UnauthorizedException('Authentication is required.');
     }
 

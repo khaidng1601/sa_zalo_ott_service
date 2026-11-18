@@ -1,0 +1,64 @@
+services:
+  mongodb:
+    image: mongo:7
+    container_name: sa-zalo-mongodb
+    restart: unless-stopped
+    ports:
+      - "${MONGO_PORT:-27017}:27017"
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  chatter-backend:
+    build:
+      context: ./chatter-backend
+      dockerfile: Dockerfile
+    container_name: sa-zalo-backend
+    restart: unless-stopped
+    ports:
+      - "${BACKEND_PORT:-4000}:4000"
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      MONGODB_URI: ${MONGODB_URI:-mongodb://mongodb:27017/sa_zalo_ott}
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:-sa-zalo-ott-change-this-secret-at-least-32-chars-2026}
+    volumes:
+      - backend_uploads:/app/uploads
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:4000/').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  chatter-ui:
+    build:
+      context: ./chatter-ui
+      dockerfile: Dockerfile
+      args:
+        REACT_APP_GRAPHQL_URL: ${REACT_APP_GRAPHQL_URL:-/graphql}
+    container_name: sa-zalo-ui
+    restart: unless-stopped
+    ports:
+      - "${UI_PORT:-3000}:80"
+    depends_on:
+      chatter-backend:
+        condition: service_healthy
+
+volumes:
+  mongodb_data:
+  backend_uploads:

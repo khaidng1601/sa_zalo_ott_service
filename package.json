@@ -1,17 +1,16 @@
 {
   "name": "sa_zalo_ott_service",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "private": true,
+  "description": "Zalo-inspired OTT messaging service (NestJS + GraphQL + MongoDB + React)",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "docker:up": "docker compose up -d --build",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f",
+    "test:backend": "npm --prefix chatter-backend test",
+    "test:ui": "npm --prefix chatter-ui test -- --watchAll=false"
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
-  "dependencies": {
-    "@nestjs/config": "^12.0.1",
-    "@nestjs/mongoose": "^12.0.0",
-    "mongoose": "^9.11.3"
-  }
+  "license": "ISC"
 }

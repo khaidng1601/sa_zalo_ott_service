@@ -6,10 +6,11 @@ async function bootstrap() {
     instrument: ObserveInstrument,
   });
   app.enableCors({
-    origin: process.env.WEB_ORIGIN ?? 'http://localhost:3000',
-    methods: ['GET', 'POST'],
+    origin: true,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   });
-  await app.listen(process.env.PORT ?? 3000);
+  await app.listen(process.env.PORT ?? 4000, '0.0.0.0');
 }
 await bootstrap();

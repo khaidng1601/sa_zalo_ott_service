@@ -33,6 +33,9 @@ export class User {
   @Field(() => UserRole)
   role: UserRole;
 
+  @Field({ nullable: true })
+  lastSeenAt?: Date;
+
   @Field()
   createdAt: Date;
 

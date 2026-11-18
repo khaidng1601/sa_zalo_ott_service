@@ -1,4 +1,4 @@
-import { Field, ID, ObjectType, registerEnumType } from '@nestjs/graphql';
+import { Field, ID, Int, ObjectType, registerEnumType } from '@nestjs/graphql';
 
 export enum ConversationType {
   DIRECT = 'direct',
@@ -38,6 +38,15 @@ export class Conversation {
   @Field({ nullable: true })
   lastMessageAt?: Date;
 
+  @Field({ nullable: true })
+  lastMessagePreview?: string;
+
+  @Field({ nullable: true })
+  closedAt?: Date;
+
+  @Field(() => Int, { nullable: true })
+  memberCount?: number;
+
   @Field()
   createdAt: Date;
 
@@ -59,6 +68,15 @@ export class ConversationMember {
   @Field({ nullable: true })
   displayName?: string;
 
+  @Field({ nullable: true })
+  email?: string;
+
+  @Field({ nullable: true })
+  avatarUrl?: string;
+
+  @Field({ nullable: true })
+  isOnline?: boolean;
+
   @Field(() => ConversationRole)
   role: ConversationRole;
 
@@ -70,4 +88,7 @@ export class ConversationMember {
 
   @Field({ nullable: true })
   leftAt?: Date;
+
+  @Field({ nullable: true })
+  lastReadAt?: Date;
 }
