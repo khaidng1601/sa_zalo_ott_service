@@ -73,7 +73,8 @@ Once all three containers (`sa-zalo-mongodb`, `sa-zalo-backend`, `sa-zalo-ui`) a
 
 | Service | Local URL | Notes |
 | :--- | :--- | :--- |
-| **Web UI (Nginx + React)** | http://localhost:3000 | Main application entrypoint (`/login`, `/signup`, `/`) |
+| **Web UI (Nginx + React)** | http://localhost:3000 | Main desktop web entrypoint (`/login`, `/signup`, `/`) |
+| **Mobile App (Nginx + Expo RN)** | http://localhost:3001 | Companion mobile app sharing the exact same Backend & MongoDB |
 | **GraphQL API (via Nginx)** | http://localhost:3000/graphql | Proxied directly to `chatter-backend:4000` |
 | **Backend Direct Endpoint** | http://localhost:4000/graphql | Direct NestJS container port (health check at `http://localhost:4000/`) |
 | **MongoDB** | `mongodb://localhost:27017/sa_zalo_ott` | Persisted in Docker volume `mongodb_data` |

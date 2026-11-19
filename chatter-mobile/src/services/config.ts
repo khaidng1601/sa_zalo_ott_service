@@ -29,6 +29,17 @@ export const getDefaultApiBaseUrl = (): string => {
   const fromEnv = normalizeBaseUrl(process.env.EXPO_PUBLIC_API_URL);
   if (fromEnv) return fromEnv;
 
+  // When running as a Cloud / Docker Web build (e.g. AWS EC2 :3001 or localhost:3001),
+  // Nginx reverse-proxies /graphql, /uploads, and /socket.io/ on the exact same origin.
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    const { protocol, hostname, port, origin } = window.location;
+    // Local Metro web dev server (`expo start --web` runs on 8081 / 19006) -> talk to backend gateway on :3000
+    if (port === '8081' || port === '19006') {
+      return `${protocol}//${hostname}:3000`;
+    }
+    return origin;
+  }
+
   const lanHost = detectExpoHostIp();
   if (lanHost) {
     return `http://${lanHost}:3000`;
@@ -69,7 +80,12 @@ export const getSocketBaseUrl = (): string => {
 export const resolveMediaUrl = (rawUrl?: string | null): string | undefined => {
   const trimmed = (rawUrl ?? '').trim();
   if (!trimmed) return undefined;
-  if (/^https?:\/\//i.test(trimmed) || trimmed.startsWith('file://') || trimmed.startsWith('data:')) {
+  if (
+    /^https?:\/\//i.test(trimmed) ||
+    trimmed.startsWith('file://') ||
+    trimmed.startsWith('data:') ||
+    trimmed.startsWith('blob:')
+  ) {
     return trimmed;
   }
   const base = getApiBaseUrl();
@@ -131,7 +147,7 @@ export const testServerConnection = async (
     const latencyMs = Date.now() - startedAt;
     const reason =
       err instanceof Error && err.name === 'AbortError'
-        ? 'Quá thời gian chờ (6.5s). Hãy kiểm tra điện thoại cùng Wi-Fi LAN hoặc tường lửa cổng 3000/4000.'
+        ? 'Quá thời gian chờ (6.5s). Hãy kiểm tra kết nối mạng hoặc tường lửa cổng 3000/3001.'
         : err instanceof Error
           ? err.message
           : 'Không thể kết nối máy chủ.';

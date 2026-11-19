@@ -128,7 +128,28 @@ If campus/guest Wi-Fi blocks peer-to-peer LAN traffic (AP Isolation):
 
 ---
 
-## 6. Instant Cross-Platform Demo (Web + Mobile Real-Time Sync)
+## 6. Deploying Mobile + Web Together on AWS EC2 (Shared Database Demo)
+
+`chatter-mobile` is containerized in [chatter-mobile/Dockerfile](./chatter-mobile/Dockerfile) and integrated directly into [docker-compose.yml](./docker-compose.yml) (`sa-zalo-mobile` on port **`3001`**) alongside `chatter-ui` (port **`80` / `3000`**), `chatter-backend` (`4000`), and `mongodb` (`27017`).
+
+### Deploy / Update Your AWS EC2 Stack (1 Command)
+From the repository root on Windows PowerShell:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\provision-and-deploy-ec2.ps1 -Region ap-southeast-2
+```
+*(Or if you already know your EC2 IP and `.pem` key, ensure TCP port `3001` is open in your EC2 Security Group and run `.\scripts\deploy-to-ec2.ps1 -HostIp <EC2_PUBLIC_IP> -KeyPath .\sa-zalo-ott-key.pem`.)*
+
+### Live URLs After Deployment (All Sharing One MongoDB + Socket.IO Server)
+- **Web App (`chatter-ui`):** `http://<EC2_PUBLIC_IP>:3000` (or `http://<EC2_PUBLIC_IP>`)
+- **Cloud Mobile App (`chatter-mobile` — Zero Install!):** `http://<EC2_PUBLIC_IP>:3001`
+  - Open directly in **Safari / Chrome on any iPhone or Android phone** (no Expo Go installation or login required — your teacher can open it on their phone in 2 seconds!).
+  - When opened on a wide laptop/projector screen, it automatically renders inside a mobile phone frame so you can show **Web (`:3000`)** and **Mobile (`:3001`)** side-by-side on the classroom projector!
+- **Native Expo Go App (`chatter-mobile`):** In Expo Go, tap the top-right Server button on the Login screen and enter `http://<EC2_PUBLIC_IP>:3000` — native Expo Go also connects to the exact same AWS EC2 MongoDB database!
+
+---
+
+## 7. Instant Cross-Platform Demo (Web + Mobile Real-Time Sync)
 
 1. Open the Web UI in your laptop browser at `http://localhost:3000` and log in as **Nguyễn Minh** (`minh.nguyen@chatter.vn` / `Password@123`).
 2. Open **Chatter OTT** in **Expo Go** on your phone and tap the **Trần Thị Lan** 1-click demo chip (`lan.tran@chatter.vn` / `Password@123`).

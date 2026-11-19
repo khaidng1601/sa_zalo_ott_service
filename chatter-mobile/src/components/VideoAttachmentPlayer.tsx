@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import * as WebBrowser from 'expo-web-browser';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,15 +13,27 @@ interface VideoAttachmentPlayerProps {
   sizeBytes: number;
 }
 
+const NativeVideoBox: React.FC<{ uri: string }> = ({ uri }) => {
+  const player = useVideoPlayer(uri, (p) => {
+    p.loop = false;
+  });
+
+  return (
+    <VideoView
+      player={player}
+      style={styles.video}
+      nativeControls
+      contentFit="contain"
+    />
+  );
+};
+
 export const VideoAttachmentPlayer: React.FC<VideoAttachmentPlayerProps> = ({
   url,
   originalName,
   sizeBytes,
 }) => {
   const resolvedUri = resolveMediaUrl(url) ?? '';
-  const player = useVideoPlayer(resolvedUri, (p) => {
-    p.loop = false;
-  });
 
   const handleOpenExternal = async () => {
     if (!resolvedUri) return;
@@ -35,12 +47,22 @@ export const VideoAttachmentPlayer: React.FC<VideoAttachmentPlayerProps> = ({
   return (
     <View style={styles.wrapper}>
       <View style={styles.videoBox}>
-        <VideoView
-          player={player}
-          style={styles.video}
-          nativeControls
-          contentFit="contain"
-        />
+        {Platform.OS === 'web' ? (
+          React.createElement('video', {
+            src: resolvedUri,
+            controls: true,
+            playsInline: true,
+            preload: 'metadata',
+            style: {
+              width: '100%',
+              height: '100%',
+              objectFit: 'contain',
+              backgroundColor: '#0F172A',
+            },
+          })
+        ) : (
+          <NativeVideoBox uri={resolvedUri} />
+        )}
       </View>
       <View style={styles.metaRow}>
         <View style={styles.metaInfo}>

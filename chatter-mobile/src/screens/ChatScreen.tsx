@@ -393,6 +393,7 @@ export const ChatScreen: React.FC<Props> = ({ route, navigation }) => {
           name: asset.fileName,
           mimeType: asset.mimeType || 'image/jpeg',
           size: asset.fileSize,
+          webFile: (asset as { file?: File }).file,
         });
         uploaded.push(item);
       }
@@ -459,6 +460,7 @@ export const ChatScreen: React.FC<Props> = ({ route, navigation }) => {
         name: asset.fileName || `video_${Date.now()}.mp4`,
         mimeType: asset.mimeType || 'video/mp4',
         size: asset.fileSize,
+        webFile: (asset as { file?: File }).file,
       });
       stageUploadedAssets([item]);
     } catch (err) {
@@ -498,6 +500,7 @@ export const ChatScreen: React.FC<Props> = ({ route, navigation }) => {
         name: asset.name,
         mimeType: asset.mimeType,
         size: asset.size,
+        webFile: asset.file,
       });
       stageUploadedAssets([item]);
     } catch (err) {

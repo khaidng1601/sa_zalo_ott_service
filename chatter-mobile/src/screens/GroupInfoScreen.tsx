@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -168,29 +169,42 @@ export const GroupInfoScreen: React.FC<Props> = ({ route, navigation }) => {
     }
   };
 
+  const performLeaveGroup = async () => {
+    setBusy(true);
+    try {
+      await graphqlRequest(
+        'mutation LeaveGroup($conversationId: String!) { leaveGroup(conversationId: $conversationId) { userId } }',
+        { conversationId },
+      );
+      await refreshConversations(true);
+      navigation.popToTop();
+    } catch (err) {
+      setFeedback({
+        type: 'err',
+        text: err instanceof Error ? err.message : 'Không thể rời nhóm.',
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleLeaveGroup = () => {
+    if (Platform.OS === 'web') {
+      if (
+        typeof window !== 'undefined' &&
+        window.confirm('Bạn có chắc chắn muốn rời khỏi nhóm này?')
+      ) {
+        void performLeaveGroup();
+      }
+      return;
+    }
     Alert.alert('Rời nhóm', 'Bạn có chắc chắn muốn rời khỏi nhóm này?', [
       { text: 'Hủy', style: 'cancel' },
       {
         text: 'Rời nhóm',
         style: 'destructive',
-        onPress: async () => {
-          setBusy(true);
-          try {
-            await graphqlRequest(
-              'mutation LeaveGroup($conversationId: String!) { leaveGroup(conversationId: $conversationId) { userId } }',
-              { conversationId },
-            );
-            await refreshConversations(true);
-            navigation.popToTop();
-          } catch (err) {
-            setFeedback({
-              type: 'err',
-              text: err instanceof Error ? err.message : 'Không thể rời nhóm.',
-            });
-          } finally {
-            setBusy(false);
-          }
+        onPress: () => {
+          void performLeaveGroup();
         },
       },
     ]);

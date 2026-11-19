@@ -103,11 +103,17 @@ const buildMultipartForm = async (asset: LocalUploadAsset): Promise<FormData> =>
 
   if (Platform.OS === 'web') {
     if (asset.webFile) {
-      formData.append('file', asset.webFile);
+      formData.append('file', asset.webFile, descriptor.name);
     } else {
       const blobRes = await fetch(descriptor.uri);
       const blob = await blobRes.blob();
-      formData.append('file', blob, descriptor.name);
+      const typedFile =
+        typeof File !== 'undefined'
+          ? new File([blob], descriptor.name, {
+              type: descriptor.type || blob.type || 'application/octet-stream',
+            })
+          : blob;
+      formData.append('file', typedFile, descriptor.name);
     }
   } else {
     formData.append('file', {

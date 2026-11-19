@@ -113,6 +113,7 @@ export const ProfileScreen: React.FC = () => {
         name: asset.fileName,
         mimeType: asset.mimeType,
         size: asset.fileSize,
+        webFile: (asset as { file?: File }).file,
       });
       setAvatarUrl(uploaded.url);
       const updated = await graphqlRequest<{
