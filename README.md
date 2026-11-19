@@ -4,6 +4,8 @@ Zalo-inspired OTT messaging web application built with **React 19 + Material UI*
 
 ## Documentation
 
+- [Course Brief (Detai2026.pdf)](./docs/Detai2026.pdf)
+- [Architecture Report: requirement traceability, patterns, quality attributes, ADRs (Vietnamese)](./docs/architecture-report.md)
 - [Architecture Audit & MVP Implementation Plan](./PLAN.md)
 - [System Data Model & Business Flows (Vietnamese)](./docs/system-data-flow.md)
 
@@ -134,14 +136,29 @@ docker run --rm -e CI=true chatter-ui-test npx react-scripts test --watchAll=fal
    cp .env.example .env
    pnpm install
    pnpm test          # Unit tests (Vitest)
-   pnpm test:e2e      # E2E tests (requires MongoDB running on MONGODB_URI)
+   pnpm test:e2e      # E2E acceptance tests (needs MongoDB, see below)
    ```
+   The e2e suite starts the whole app and covers every requirement in the course brief
+   (accounts, groups, 1-1 and group chat with all 5 message kinds, real-time delivery, statistics).
+   It uses MongoDB at `mongodb://localhost:27017` (override with `E2E_MONGODB_URL`), creates its own
+   `chatter_e2e_<timestamp>` database, and drops it when finished.
 3. **Frontend Tests (`chatter-ui`):**
    ```bash
    cd chatter-ui
    pnpm install
-   pnpm test -- --watchAll=false
+   pnpm test --watchAll=false
    ```
+
+### Continuous Integration & Weekly Cloud Release (GitHub Actions)
+
+| Workflow | Runs | What it does |
+| :--- | :--- | :--- |
+| [CI](./.github/workflows/ci.yml) | Every push and pull request | Backend lint, unit tests, e2e tests (MongoDB service container), build; frontend type check, tests, build; Docker image build |
+| [Weekly release](./.github/workflows/weekly-release.yml) | Fridays 10:00 Vietnam time, or manually from the Actions tab | Re-runs CI, deploys to AWS EC2, fails if the live `/graphql` health check does not pass, then creates a `release-YYYY-Www` GitHub Release |
+
+One-time setup for the weekly release: create the EC2 instance (see section 3), then add the repository secrets
+`EC2_HOST` (public IP or DNS) and `EC2_SSH_KEY` (contents of the `.pem` file) under
+**Settings → Secrets and variables → Actions**. Scheduled runs only happen on the default branch (`main`).
 
 ---
 
