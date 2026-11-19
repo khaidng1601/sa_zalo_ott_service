@@ -44,11 +44,12 @@ export class AuthTokenService {
     }
 
     const [headerPart, payloadPart, signaturePart] = parts;
+    // Compare the encoded text, not decoded bytes: base64url decoding ignores the
+    // last character's spare bits, so several spellings decode to the same bytes.
     const expectedSignature = Buffer.from(
       this.sign(`${headerPart}.${payloadPart}`),
-      'base64url',
     );
-    const providedSignature = Buffer.from(signaturePart, 'base64url');
+    const providedSignature = Buffer.from(signaturePart);
 
     if (
       expectedSignature.length !== providedSignature.length ||

@@ -94,6 +94,53 @@ const BLOCKED_EXTENSIONS = new Set([
   '.sh',
 ]);
 
+const startsWith = (buf: Buffer, bytes: number[], offset = 0) =>
+  buf.length >= offset + bytes.length &&
+  bytes.every((byte, i) => buf[offset + i] === byte);
+const ascii = (text: string) => Array.from(Buffer.from(text, 'latin1'));
+
+const ZIP = [0x50, 0x4b, 0x03, 0x04]; // docx/xlsx/pptx are ZIP containers
+const OLE = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]; // legacy doc/xls/ppt
+
+/**
+ * Checks the first bytes of a file against the type the client declared,
+ * so a renamed executable or HTML page cannot be stored as an image or PDF.
+ */
+const CONTENT_SIGNATURES: Record<string, (buf: Buffer) => boolean> = {
+  'image/jpeg': (b) => startsWith(b, [0xff, 0xd8, 0xff]),
+  'image/png': (b) => startsWith(b, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+  'image/gif': (b) => startsWith(b, ascii('GIF87a')) || startsWith(b, ascii('GIF89a')),
+  'image/webp': (b) => startsWith(b, ascii('RIFF')) && startsWith(b, ascii('WEBP'), 8),
+  'video/mp4': (b) => startsWith(b, ascii('ftyp'), 4),
+  'video/quicktime': (b) =>
+    ['ftyp', 'moov', 'mdat', 'wide', 'free', 'skip'].some((box) => startsWith(b, ascii(box), 4)),
+  'video/webm': (b) => startsWith(b, [0x1a, 0x45, 0xdf, 0xa3]),
+  'application/pdf': (b) => startsWith(b, ascii('%PDF-')),
+  'application/zip': (b) => startsWith(b, ZIP),
+  'application/x-zip-compressed': (b) => startsWith(b, ZIP),
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': (b) => startsWith(b, ZIP),
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': (b) => startsWith(b, ZIP),
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': (b) => startsWith(b, ZIP),
+  'application/msword': (b) => startsWith(b, OLE),
+  'application/vnd.ms-excel': (b) => startsWith(b, OLE),
+  'application/vnd.ms-powerpoint': (b) => startsWith(b, OLE),
+};
+const TEXT_MIMES = new Set(['text/plain', 'text/csv', 'text/markdown', 'application/json']);
+const EXTENSION_MIME: Record<string, string> = {
+  '.pdf': 'application/pdf',
+  '.zip': 'application/zip',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  '.doc': 'application/msword',
+  '.xls': 'application/vnd.ms-excel',
+  '.ppt': 'application/vnd.ms-powerpoint',
+  '.txt': 'text/plain',
+  '.csv': 'text/csv',
+  '.md': 'text/markdown',
+  '.json': 'application/json',
+};
+
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const MAX_DOCUMENT_BYTES = 25 * 1024 * 1024;
 const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
@@ -169,6 +216,34 @@ export class StorageService implements OnModuleInit {
     );
   }
 
+  /** Rejects files whose bytes do not match the declared type. */
+  assertContentMatchesType(
+    mimeType: string,
+    originalName: string,
+    buffer: Buffer,
+  ): void {
+    // Documents sent as octet-stream are checked by their extension instead.
+    const effectiveMime =
+      mimeType === 'application/octet-stream'
+        ? EXTENSION_MIME[path.extname(originalName).toLowerCase()]
+        : mimeType;
+
+    if (effectiveMime && TEXT_MIMES.has(effectiveMime)) {
+      // Plain text never contains NUL bytes; binaries almost always do.
+      if (buffer.subarray(0, 8192).includes(0)) {
+        throw new BadRequestException('File content does not match its declared text type.');
+      }
+      return;
+    }
+
+    const matches = effectiveMime ? CONTENT_SIGNATURES[effectiveMime] : undefined;
+    if (!matches || !matches(buffer)) {
+      throw new BadRequestException(
+        `File content does not match its declared type "${mimeType}".`,
+      );
+    }
+  }
+
   async saveConversationFile(
     actorId: string,
     conversationId: string,
@@ -189,6 +264,7 @@ export class StorageService implements OnModuleInit {
       file.mimetype,
       file.size,
     );
+    this.assertContentMatchesType(mimeType, decodedOriginalName, file.buffer);
 
     const safeBase = this.sanitizeFileName(decodedOriginalName);
     const storedFileName = `${Date.now()}-${randomBytes(6).toString('hex')}-${safeBase}`;
@@ -240,6 +316,7 @@ export class StorageService implements OnModuleInit {
     if (file.size <= 0 || file.size > MAX_AVATAR_BYTES) {
       throw new BadRequestException('Avatar image cannot exceed 5 MB.');
     }
+    this.assertContentMatchesType(mimeType, file.originalname, file.buffer);
 
     const extMap: Record<string, string> = {
       'image/jpeg': '.jpg',
