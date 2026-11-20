@@ -10,6 +10,7 @@ import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
 import { AppResolver } from './app.resolver.js';
 import { ActivitiesModule } from './activities/activities.module.js';
 import { AuthModule } from './auth/auth.module.js';
+import { CallsModule } from './calls/calls.module.js';
 import { ConversationsModule } from './conversations/conversations.module.js';
 import { MessagesModule } from './messages/messages.module.js';
 import { RealtimeModule } from './realtime/realtime.module.js';
@@ -33,6 +34,9 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
         UPLOAD_DIR: Joi.string().optional(),
         ADMIN_BOOTSTRAP_EMAIL: Joi.string().email().optional(),
         SEED_DEMO_DATA: Joi.string().valid('true', 'false').default('true'),
+        WEBRTC_STUN_URLS: Joi.string().optional(),
+        WEBRTC_TURN_URLS: Joi.string().allow('').optional(),
+        WEBRTC_TURN_SHARED_SECRET: Joi.string().allow('').optional(),
       }),
     }),
     GraphQLModule.forRoot<ApolloDriverConfig>({
@@ -48,6 +52,7 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     AuthModule,
     ActivitiesModule,
     RealtimeModule,
+    CallsModule,
     ConversationsModule,
     StorageModule,
     MessagesModule,

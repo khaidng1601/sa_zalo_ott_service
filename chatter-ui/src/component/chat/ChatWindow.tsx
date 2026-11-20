@@ -18,6 +18,7 @@ import {
   Typography,
 } from "@mui/material";
 import AttachFileRoundedIcon from "@mui/icons-material/AttachFileRounded";
+import CallRoundedIcon from "@mui/icons-material/CallRounded";
 import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
 import DescriptionRoundedIcon from "@mui/icons-material/DescriptionRounded";
@@ -28,6 +29,7 @@ import ReplyRoundedIcon from "@mui/icons-material/ReplyRounded";
 import SendRoundedIcon from "@mui/icons-material/SendRounded";
 import SmartDisplayOutlinedIcon from "@mui/icons-material/SmartDisplayOutlined";
 import AddReactionOutlinedIcon from "@mui/icons-material/AddReactionOutlined";
+import VideocamRoundedIcon from "@mui/icons-material/VideocamRounded";
 import {
   findStickerByCode,
   QUICK_EMOJIS,
@@ -35,6 +37,7 @@ import {
   ZALO_STICKERS,
 } from "../../constants/emotions";
 import { graphqlRequest } from "../../services/graphql";
+import { CallHistoryEntry } from "../../services/calls";
 import {
   formatFileSize,
   uploadConversationFile,
@@ -170,6 +173,23 @@ const DELETE_MESSAGE_MUTATION = `
   }
 `;
 
+const CALL_HISTORY_QUERY = `
+  query CallHistory($conversationId: String!, $limit: Int) {
+    callHistory(conversationId: $conversationId, limit: $limit) {
+      callId
+      conversationId
+      callerId
+      calleeId
+      mode
+      outcome
+      startedAt
+      connectedAt
+      endedAt
+      durationSeconds
+    }
+  }
+`;
+
 interface ChatWindowProps {
   conversation: Conversation;
   currentUserId: string;
@@ -179,6 +199,7 @@ interface ChatWindowProps {
     message: ChatMessage;
     seq: number;
   } | null;
+  callHistoryEvent?: { entry: CallHistoryEntry; seq: number } | null;
   typingUsers: string[];
   onEmitTyping?: (conversationId: string, isTyping: boolean) => void;
   onConversationActivity?: () => void;
@@ -189,6 +210,38 @@ const formatTime = (iso: string) =>
     hour: "2-digit",
     minute: "2-digit",
   });
+
+const formatDuration = (seconds: number): string => {
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`;
+};
+
+const getCallHistoryLabel = (
+  entry: CallHistoryEntry,
+  currentUserId: string,
+): string => {
+  const isCaller = entry.callerId === currentUserId;
+  const callType = entry.mode === "video" ? "video" : "thoại";
+  switch (entry.outcome) {
+    case "rejected":
+      return isCaller
+        ? `Cuộc gọi ${callType} bị từ chối`
+        : `Bạn đã từ chối cuộc gọi ${callType}`;
+    case "cancelled":
+      return isCaller
+        ? `Bạn đã hủy cuộc gọi ${callType}`
+        : `Người gọi đã hủy cuộc gọi ${callType}`;
+    case "timeout":
+      return isCaller
+        ? `Không có người nghe cuộc gọi ${callType}`
+        : `Cuộc gọi ${callType} nhỡ`;
+    case "disconnect":
+      return `Cuộc gọi ${callType} bị ngắt`;
+    case "hangup":
+      return `Cuộc gọi ${callType} đã kết thúc`;
+  }
+};
 
 const getDocBadgeLabel = (fileName: string, mimeType: string): string => {
   const ext = fileName.split(".").pop()?.toUpperCase() ?? "";
@@ -205,11 +258,13 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   currentUserId,
   canManageGroup,
   incomingEventMessage,
+  callHistoryEvent,
   typingUsers,
   onEmitTyping,
   onConversationActivity,
 }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [callHistory, setCallHistory] = useState<CallHistoryEntry[]>([]);
   const [hasMore, setHasMore] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -247,6 +302,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   const loadInitialMessages = useCallback(async () => {
     setIsLoading(true);
     setError("");
+    setCallHistory([]);
     try {
       const data = await graphqlRequest<{
         messages: {
@@ -263,6 +319,24 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
       setNextCursor(data?.messages?.nextCursor ?? null);
       scrollToBottom("auto");
 
+      if (conversation.type === "DIRECT") {
+        try {
+          const historyData = await graphqlRequest<{
+            callHistory: CallHistoryEntry[];
+          }>(CALL_HISTORY_QUERY, {
+            conversationId: conversation.id,
+            limit: 100,
+          });
+          setCallHistory(historyData.callHistory);
+        } catch (historyError) {
+          setError(
+            historyError instanceof Error
+              ? historyError.message
+              : "Không thể tải lịch sử cuộc gọi.",
+          );
+        }
+      }
+
       void graphqlRequest(
         "mutation MarkRead($conversationId: String!) { markConversationRead(conversationId: $conversationId) }",
         { conversationId: conversation.id },
@@ -274,7 +348,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     } finally {
       setIsLoading(false);
     }
-  }, [conversation.id, scrollToBottom]);
+  }, [conversation.id, conversation.type, scrollToBottom]);
 
   useEffect(() => {
     setReplyTo(null);
@@ -308,6 +382,22 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
       scrollToBottom("smooth");
     }
   }, [incomingEventMessage, conversation.id, scrollToBottom]);
+
+  useEffect(() => {
+    if (!callHistoryEvent) return;
+    const { entry } = callHistoryEvent;
+    if (entry.conversationId !== conversation.id) return;
+
+    setCallHistory((previous) =>
+      [entry, ...previous.filter((item) => item.callId !== entry.callId)]
+        .sort(
+          (a, b) =>
+            new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime(),
+        )
+        .slice(0, 100),
+    );
+    scrollToBottom("smooth");
+  }, [callHistoryEvent, conversation.id, scrollToBottom]);
 
   const loadOlderMessages = async () => {
     if (!hasMore || !nextCursor || isLoadingOlder) return;
@@ -738,6 +828,24 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     );
   };
 
+  const timelineItems = [
+    ...messages.map((message) => ({
+      type: "message" as const,
+      id: message.id,
+      timestamp: message.createdAt,
+      message,
+    })),
+    ...callHistory.map((entry) => ({
+      type: "call" as const,
+      id: entry.callId,
+      timestamp: entry.startedAt,
+      entry,
+    })),
+  ].sort(
+    (a, b) =>
+      new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+  );
+
   return (
     <Box
       sx={{
@@ -785,7 +893,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           <Box sx={{ flex: 1, display: "grid", placeItems: "center" }}>
             <CircularProgress size={28} aria-label="Đang tải tin nhắn" />
           </Box>
-        ) : messages.length === 0 ? (
+        ) : timelineItems.length === 0 ? (
           <Box
             sx={{
               flex: 1,
@@ -805,7 +913,43 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
             </Box>
           </Box>
         ) : (
-          messages.map((msg) => {
+          timelineItems.map((item) => {
+            if (item.type === "call") {
+              const entry = item.entry;
+              const CallIcon =
+                entry.mode === "video" ? VideocamRoundedIcon : CallRoundedIcon;
+              return (
+                <Box
+                  key={`call-${entry.callId}`}
+                  aria-label={getCallHistoryLabel(entry, currentUserId)}
+                  sx={{
+                    alignSelf: "center",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 1,
+                    px: 1.5,
+                    py: 0.75,
+                    borderRadius: 5,
+                    bgcolor: "#fff",
+                    color: "#63748a",
+                    boxShadow: "0 1px 3px rgba(16, 35, 58, 0.08)",
+                  }}
+                >
+                  <CallIcon sx={{ color: "#0866ff", fontSize: 18 }} />
+                  <Typography sx={{ fontSize: 12.5 }}>
+                    {getCallHistoryLabel(entry, currentUserId)}
+                    {entry.connectedAt
+                      ? ` · ${formatDuration(entry.durationSeconds)}`
+                      : ""}
+                  </Typography>
+                  <Typography sx={{ fontSize: 10.5, color: "#8291a3" }}>
+                    {formatTime(entry.startedAt)}
+                  </Typography>
+                </Box>
+              );
+            }
+
+            const msg = item.message;
             const isMine = msg.senderId === currentUserId;
             const canRecall = !msg.isDeleted && (isMine || canManageGroup);
 

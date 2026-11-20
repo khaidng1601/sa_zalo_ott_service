@@ -7,6 +7,7 @@ Zalo-inspired OTT messaging web application built with **React 19 + Material UI*
 - [Course Brief (Detai2026.pdf)](./docs/Detai2026.pdf)
 - [Architecture Report: requirement traceability, patterns, quality attributes, ADRs (Vietnamese)](./docs/architecture-report.md)
 - [Architecture Audit & MVP Implementation Plan](./PLAN.md)
+- [Feature Enhancement Plan: optimization, Android APK, and 1-1 calls](./docs/feature-enhancement-plan.md)
 - [System Data Model & Business Flows (Vietnamese)](./docs/system-data-flow.md)
 
 ---

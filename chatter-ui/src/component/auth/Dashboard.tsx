@@ -32,8 +32,18 @@ import PersonAddAltRoundedIcon from "@mui/icons-material/PersonAddAltRounded";
 import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded";
 import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
 import SettingsRoundedIcon from "@mui/icons-material/SettingsRounded";
+import PhoneRoundedIcon from "@mui/icons-material/PhoneRounded";
+import VideocamRoundedIcon from "@mui/icons-material/VideocamRounded";
 import { graphqlRequest } from "../../services/graphql";
 import { ChatRealtimeClient, connectChatSocket } from "../../services/realtime";
+import {
+  CallIceServer,
+  CallHistoryEntry,
+  CallRealtimeClient,
+  CallSignal,
+  connectCallSocket,
+  DirectCallMode,
+} from "../../services/calls";
 import {
   ChatMessage,
   Conversation,
@@ -46,6 +56,9 @@ import ChatWindow from "../chat/ChatWindow";
 import GroupInfoDrawer from "../chat/GroupInfoDrawer";
 import ContactsDirectoryPanel from "../contacts/ContactsDirectoryPanel";
 import ProfileDialog from "../profile/ProfileDialog";
+import DirectCallDialog, {
+  DirectCallDialogState,
+} from "../chat/DirectCallDialog";
 
 interface UserProfile {
   id: string;
@@ -110,6 +123,16 @@ const Dashboard = ({
   const [incomingEventMessage, setIncomingEventMessage] = useState<{
     type: "created" | "updated" | "deleted";
     message: ChatMessage;
+    seq: number;
+  } | null>(null);
+  const [callClient, setCallClient] = useState<CallRealtimeClient | null>(null);
+  const [callDialogState, setCallDialogState] =
+    useState<DirectCallDialogState | null>(null);
+  const [callIceServers, setCallIceServers] = useState<CallIceServer[]>([]);
+  const [callSignal, setCallSignal] = useState<CallSignal | null>(null);
+  const [callSignalSeq, setCallSignalSeq] = useState(0);
+  const [callHistoryEvent, setCallHistoryEvent] = useState<{
+    entry: CallHistoryEntry;
     seq: number;
   } | null>(null);
 
@@ -231,6 +254,42 @@ const Dashboard = ({
       realtimeRef.current = null;
     };
   }, [currentUserId, refreshConversations]);
+
+  useEffect(() => {
+    const client = connectCallSocket({
+      onIncoming: (call) => {
+        setCallDialogState({ role: "incoming", call, status: "ringing" });
+      },
+      onOutgoing: (call) => {
+        setCallDialogState({ role: "outgoing", call, status: "ringing" });
+      },
+      onAccepted: (payload) => {
+        setCallDialogState((current) =>
+          current?.call.callId === payload.callId
+            ? { ...current, status: "active" }
+            : current,
+        );
+      },
+      onRejected: () => {
+        setCallDialogState(null);
+      },
+      onEnded: () => {
+        setCallDialogState(null);
+      },
+      onSignal: (payload) => {
+        setCallSignal(payload.signal);
+        setCallSignalSeq((seq) => seq + 1);
+      },
+      onIceServers: (servers) => {
+        setCallIceServers(servers);
+      },
+      onHistoryUpdated: (entry) => {
+        setCallHistoryEvent({ entry, seq: Date.now() + Math.random() });
+      },
+    });
+    setCallClient(client);
+    return () => client?.disconnect();
+  }, []);
 
   useEffect(() => {
     if (selectedId) {
@@ -415,6 +474,30 @@ const Dashboard = ({
   const activeTypingUsers = selectedConversation
     ? Object.values(typingByConv[selectedConversation.id] ?? {})
     : [];
+
+  const startDirectCall = async (mode: DirectCallMode) => {
+    if (
+      !selectedConversation ||
+      selectedConversation.type !== "DIRECT" ||
+      !callClient
+    ) {
+      setError("Cuộc gọi 1-1 chưa sẵn sàng.");
+      return;
+    }
+    const partner = selectedConversation.members.find(
+      (member) => member.userId !== currentUserId,
+    );
+    if (!partner) {
+      setError("Không tìm thấy người nhận cuộc gọi.");
+      return;
+    }
+    const result = await callClient.invite(
+      selectedConversation.id,
+      partner.userId,
+      mode,
+    );
+    if (!result.ok) setError(result.message || "Không thể bắt đầu cuộc gọi.");
+  };
 
   return (
     <Box
@@ -868,6 +951,28 @@ const Dashboard = ({
                       })()}
                 </Typography>
               </Box>
+              {selectedConversation.type === "DIRECT" && (
+                <>
+                  <Tooltip title="Gọi thoại 1-1">
+                    <IconButton
+                      aria-label="Gọi thoại 1-1"
+                      onClick={() => void startDirectCall("audio")}
+                      sx={{ color: "#0866ff", bgcolor: "#eef5ff" }}
+                    >
+                      <PhoneRoundedIcon />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Gọi video 1-1">
+                    <IconButton
+                      aria-label="Gọi video 1-1"
+                      onClick={() => void startDirectCall("video")}
+                      sx={{ color: "#0866ff", bgcolor: "#eef5ff" }}
+                    >
+                      <VideocamRoundedIcon />
+                    </IconButton>
+                  </Tooltip>
+                </>
+              )}
               <Tooltip title="Thông tin & Quản lý thành viên">
                 <IconButton
                   aria-label="Thông tin hội thoại và thành viên"
@@ -884,6 +989,7 @@ const Dashboard = ({
               currentUserId={currentUserId}
               canManageGroup={Boolean(canManageSelectedGroup)}
               incomingEventMessage={incomingEventMessage}
+              callHistoryEvent={callHistoryEvent}
               typingUsers={activeTypingUsers}
               onEmitTyping={(convId, isTyping) =>
                 realtimeRef.current?.setTyping(convId, isTyping)
@@ -1056,6 +1162,46 @@ const Dashboard = ({
           </DialogActions>
         </Box>
       </Dialog>
+
+      {callDialogState && (() => {
+        const callConversation = conversations.find(
+          (conversation) => conversation.id === callDialogState.call.conversationId,
+        );
+        const partner = callConversation?.members.find(
+          (member) => member.userId !== currentUserId,
+        );
+        return (
+          <DirectCallDialog
+            open={Boolean(callDialogState)}
+            state={callDialogState}
+            peerName={
+              partner?.displayName ||
+              (callConversation
+                ? getConversationName(callConversation, currentUserId)
+                : "Người dùng")
+            }
+            peerAvatar={partner?.avatarUrl ?? undefined}
+            callClient={callClient}
+            iceServers={callIceServers}
+            onAccepted={(callId) =>
+              setCallDialogState((current) =>
+                current?.call.callId === callId
+                  ? { ...current, status: "active" }
+                  : current,
+              )
+            }
+            onEnded={(message) => {
+              if (message) setError(message);
+              setCallDialogState(null);
+            }}
+            onSignal={(callId, signal) =>
+              callClient?.signal(callId, signal)
+            }
+            signal={callSignal}
+            signalSeq={callSignalSeq}
+          />
+        );
+      })()}
 
       {/* Profile & Password Dialog */}
       {currentUser && (

@@ -339,6 +339,136 @@ describe('Chatter OTT acceptance (e2e)', () => {
       }
     });
 
+    it('persists completed direct-call history for both conversation members', async () => {
+      const callerSocket = io(`${baseUrl}/calls`, {
+        path: '/socket.io/',
+        auth: { token: alice.token },
+        transports: ['websocket'],
+        reconnection: false,
+      });
+      const calleeSocket = io(`${baseUrl}/calls`, {
+        path: '/socket.io/',
+        auth: { token: bob.token },
+        transports: ['websocket'],
+        reconnection: false,
+      });
+
+      const waitForConnect = (socket: Socket) =>
+        new Promise<void>((resolve, reject) => {
+          socket.once('connect', resolve);
+          socket.once('connect_error', reject);
+        });
+      const waitForEvent = <T>(socket: Socket, event: string) =>
+        new Promise<T>((resolve) => socket.once(event, resolve));
+      const emitAck = (
+        socket: Socket,
+        event: string,
+        payload: Record<string, unknown>,
+      ) =>
+        new Promise<{ ok: boolean; callId?: string; message?: string }>(
+          (resolve, reject) => {
+            socket
+              .timeout(5000)
+              .emit(
+                event,
+                payload,
+                (
+                  error: Error | null,
+                  response: { ok: boolean; callId?: string; message?: string },
+                ) => {
+                  if (error) reject(error);
+                  else resolve(response);
+                },
+              );
+          },
+        );
+
+      try {
+        await Promise.all([waitForConnect(callerSocket), waitForConnect(calleeSocket)]);
+        const incomingCall = waitForEvent<{
+          callId: string;
+          conversationId: string;
+        }>(calleeSocket, 'call.incoming');
+        const invite = await emitAck(callerSocket, 'call.invite', {
+          conversationId: directId,
+          targetUserId: bob.id,
+          mode: 'audio',
+        });
+        expect(invite.ok).toBe(true);
+        expect(await incomingCall).toMatchObject({
+          callId: invite.callId,
+          conversationId: directId,
+        });
+
+        const acceptedCall = waitForEvent<{ callId: string }>(
+          callerSocket,
+          'call.accepted',
+        );
+        expect(
+          await emitAck(calleeSocket, 'call.accept', { callId: invite.callId }),
+        ).toMatchObject({ ok: true });
+        await expect(acceptedCall).resolves.toMatchObject({
+          callId: invite.callId,
+        });
+
+        const callerHistoryEvent = waitForEvent<{ callId: string; outcome: string }>(
+          callerSocket,
+          'call.history.updated',
+        );
+        const calleeHistoryEvent = waitForEvent<{ callId: string; outcome: string }>(
+          calleeSocket,
+          'call.history.updated',
+        );
+        expect(
+          await emitAck(callerSocket, 'call.end', { callId: invite.callId }),
+        ).toMatchObject({ ok: true });
+        await expect(callerHistoryEvent).resolves.toMatchObject({
+          callId: invite.callId,
+          outcome: 'hangup',
+        });
+        await expect(calleeHistoryEvent).resolves.toMatchObject({
+          callId: invite.callId,
+          outcome: 'hangup',
+        });
+
+        const history = await ok<{
+          callHistory: {
+            callId: string;
+            callerId: string;
+            calleeId: string;
+            mode: string;
+            outcome: string;
+            durationSeconds: number;
+          }[];
+        }>(
+          `query ($conversationId: String!) {
+            callHistory(conversationId: $conversationId) {
+              callId callerId calleeId mode outcome durationSeconds
+            }
+          }`,
+          { conversationId: directId },
+          alice.token,
+        );
+        expect(history.callHistory[0]).toMatchObject({
+          callId: invite.callId,
+          callerId: alice.id,
+          calleeId: bob.id,
+          mode: 'audio',
+          outcome: 'hangup',
+        });
+
+        const outsiderHistory = await gql(
+          `{ callHistory(conversationId: "${directId}") { callId } }`,
+          {},
+          carol.token,
+        );
+        expect(outsiderHistory.errors).toBeDefined();
+      } finally {
+        callerSocket.close();
+        calleeSocket.close();
+      }
+    });
+
     it('disconnects sockets that use an invalid token', async () => {
       const socket = io(baseUrl, {
         path: '/socket.io/',

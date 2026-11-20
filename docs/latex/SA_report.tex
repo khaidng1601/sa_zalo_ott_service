@@ -940,6 +940,16 @@ Chatter đáp ứng đủ các yêu cầu của đề và đạt 6 đặc tính 
   \end{tabularx}
 \end{table}
 
+\subsection{Những điểm cải thiện và bổ sung}
+\label{subsec:improvements}
+
+\paragraph{Gọi thoại và video 1--1 trên Web.}
+Từ một cuộc trò chuyện trực tiếp, người dùng có thể khởi tạo cuộc gọi thoại hoặc video; người nhận có thể chấp nhận hoặc từ chối, còn người gọi có thể hủy khi đang đổ chuông. Trong khi gọi, giao diện hỗ trợ bật/tắt microphone, camera và kết thúc cuộc gọi. Cuộc gọi chỉ áp dụng cho hội thoại trực tiếp có đúng hai thành viên đang hoạt động; backend xác thực JWT và kiểm tra tư cách thành viên trước khi xử lý signaling. Lời mời không được trả lời sẽ hết hạn sau 45 giây.
+
+Media được truyền bằng WebRTC giữa hai trình duyệt. Backend không nhận hay lưu nội dung âm thanh/video mà chỉ chuyển tiếp SDP offer/answer và ICE candidate qua namespace Socket.IO riêng \code{/calls}. STUN/TURN được cấu hình bằng các biến môi trường \code{WEBRTC\_STUN\_URLS}, \code{WEBRTC\_TURN\_URLS} và \code{WEBRTC\_TURN\_SHARED\_SECRET}; trình duyệt cần được cấp quyền microphone/camera. TURN cần được cấu hình và kiểm thử khi triển khai trên các mạng có NAT hoặc firewall hạn chế.
+
+Sau khi cuộc gọi kết thúc, hệ thống lưu lịch sử vào MongoDB, gồm người gọi/người nhận, chế độ thoại/video, thời điểm bắt đầu/kết nối/kết thúc, thời lượng và kết quả (từ chối, hủy, nhỡ, kết thúc hoặc mất kết nối). GraphQL chỉ cho thành viên đang hoạt động của hội thoại đọc lịch sử; Socket.IO cập nhật mục lịch sử cho cả hai phía để hiển thị trực tiếp trong timeline chat. Hiện chức năng gọi được tích hợp trên Web; gọi trên mobile và gọi nhóm chưa nằm trong phạm vi triển khai.
+
 \subsection{Hạn chế và hướng cải thiện}
 \begin{table}[H]
   \centering
@@ -954,10 +964,34 @@ Chatter đáp ứng đủ các yêu cầu của đề và đạt 6 đặc tính 
     File lưu trên ổ đĩa một máy & Mất máy là mất file & Chuyển \code{StorageService} sang S3 \\
     Chưa có HTTPS; SSH mở cho mọi IP & Token đi trên đường truyền không mã hoá & Gắn domain và chứng chỉ TLS; giới hạn SSH theo IP của nhóm \\
     Chưa kiểm thử tải & Chưa biết giới hạn số người dùng đồng thời & Chạy load test WebSocket trước khi mở rộng \\
-    Chưa có gọi video, đăng nhập QR, thông báo đẩy & Thiếu so với Zalo thật & WebRTC (dùng Socket.IO làm kênh signaling), QR qua WebSocket, FCM \\
+    Chưa có gọi nhóm, gọi trên mobile, đăng nhập QR, thông báo đẩy & Web chưa hỗ trợ gọi nhóm; mobile chưa gọi được & Mở rộng WebRTC cho nhóm; tích hợp call UI/quyền native trên mobile; QR qua WebSocket, FCM \\
     \bottomrule
   \end{tabularx}
 \end{table}
+
+\subsection{Kế hoạch cải thiện cho phiên bản Web}
+\label{subsec:web-improvement-plan}
+
+Các hạn chế dưới đây có thể được xử lý mà không cần viết lại giao diện Web. Kế hoạch ưu tiên an toàn triển khai và độ tin cậy trước khi mở rộng quy mô; gọi native trên mobile không thuộc phạm vi này.
+
+\begin{table}[H]
+  \centering
+  \small
+  \begin{tabularx}{\linewidth}{P{2.8cm}YY}
+    \toprule
+    \textbf{Giai đoạn} & \textbf{Công việc} & \textbf{Tiêu chí hoàn thành} \\
+    \midrule
+    0. Baseline & Chạy lại build và test hiện có; ghi nhận độ trễ GraphQL, số kết nối WebSocket, tài nguyên máy chủ và lỗi upload. Chốt ngưỡng chấp nhận trước khi chạy load test. & Có kết quả ban đầu để so sánh; kiểm thử chức năng chat, upload và gọi 1--1 không suy giảm. \\
+    1. Bảo mật triển khai & Cấu hình domain và TLS tại reverse proxy hoặc load balancer; chuyển hướng HTTP sang HTTPS; chỉ cho phép SSH từ IP quản trị; kiểm tra secrets không nằm trong source hoặc image. & Web, GraphQL, upload và Socket.IO hoạt động qua HTTPS/WSS; cổng SSH không mở công khai. \\
+    2. Độ tin cậy realtime và cuộc gọi & Cấu hình TURN và kiểm thử cuộc gọi qua các mạng khác nhau. Trước khi chạy nhiều backend, thay các map presence/cuộc gọi trong RAM bằng trạng thái dùng chung, thêm Redis adapter cho Socket.IO và cấu hình sticky session nếu còn dùng polling. & Hai phiên bản backend trao đổi được presence, chat và signaling; kiểm thử được chấp nhận, từ chối, timeout, ngắt kết nối và kết thúc cuộc gọi; lịch sử vẫn được lưu trong MongoDB. \\
+    3. Lưu trữ media bền vững & Tách thao tác lưu/đọc file khỏi \code{StorageService} bằng một hợp đồng lưu trữ; chuyển file sang object storage như S3, giữ nguyên metadata và quyền kiểm tra thành viên; lập quy trình migrate và backup. & File cũ và mới tải lên/tải xuống đúng quyền; đối chiếu checksum sau migrate; khôi phục thử được từ bản backup. \\
+    4. Giảm coupling backend & Đặt các port như \code{UserDirectory} và \code{ActivityRecorder} tại ranh giới module; thay lời gọi vòng giữa \code{auth} và \code{activities} bằng sự kiện nội bộ khi phù hợp; giữ nguyên hợp đồng GraphQL. & Unit/e2e tests xác nhận luồng đăng nhập, thành viên và thống kê không đổi; dependency giữa các module giảm theo sơ đồ phụ thuộc. \\
+    5. Mở rộng tính năng Web & Sau khi các giai đoạn trên ổn định, thiết kế gọi nhóm bằng SFU thay vì gửi media mesh cho mọi thành viên; dùng Web Push API và service worker cho thông báo trình duyệt. Đăng nhập QR cần chốt thêm luồng xác thực với thiết bị thứ hai trước khi triển khai. & Gọi nhóm và thông báo được kiểm thử trên các trình duyệt mục tiêu; luồng QR có xác thực, hết hạn và chống sử dụng lại; tính năng cũ vẫn qua regression tests. \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+Ưu tiên thực hiện theo thứ tự trên: không mở rộng số backend trước khi chia sẻ trạng thái Socket.IO/cuộc gọi, và không chuyển file sang object storage nếu chưa có kế hoạch migrate, phân quyền truy cập và backup.
 
 \subsection{Kết luận}
 Bài học lớn nhất của nhóm trùng với luật thứ nhất của kiến trúc: mọi lựa chọn đều là đánh đổi. Nhóm cố ý chọn modular monolith và bỏ scalability để đổi lấy sự đơn giản, phù hợp quy mô nhóm và thời hạn. Ranh giới module rõ ràng, lớp đóng và bộ test đầy đủ giúp hệ thống có thể tách thành service riêng sau này mà không phải viết lại nghiệp vụ. Các chỉ số coupling đo được cũng chỉ ra cụ thể cần sửa ở đâu trước khi làm việc đó.
