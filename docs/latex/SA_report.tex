@@ -81,7 +81,7 @@ Cột ``Đóng góp chính'' lấy từ lịch sử commit.
     Nguyễn Thị Linh Trang & Nhóm trưởng & Đăng ký tài khoản (MongoDB), đăng nhập JWT, giao diện chat dashboard \\
     Lê Đức Hoàng Nam & Thành viên & Hiện thực 3 nhóm chức năng bắt buộc (Phase 1 MVP), deploy AWS EC2, app mobile Expo \\
     Nguyễn Lê Hoàng Hưng & Thành viên & Khởi tạo React UI và NestJS, kiểm thử end-to-end, CI/CD release hằng tuần, bảo mật upload và token, báo cáo kiến trúc \\
-    Nguyễn Đinh Quang Khải & Thành viên & \todo{đóng góp chính} \\
+    Nguyễn Đinh Quang Khải & Thành viên & Mobile app frontend; gọi thoại/video 1--1 trên Web bằng WebRTC và Socket.IO; cập nhật báo cáo kiến trúc \\
     \bottomrule
   \end{tabularx}
 \end{table}
@@ -241,7 +241,7 @@ Theo cách tài liệu hoá ``Views and Beyond''~\cite{clements2010views}, mỗi
     Use case (kịch bản) & Ai dùng hệ thống để làm gì? & Use case diagram (Hình~\ref{fig:usecase}) \\
     Allocation / deployment & Phần mềm chạy ở đâu, qua cổng nào? & Kiến trúc triển khai (Hình~\ref{fig:arch}) \\
     Module & Code chia thành những module nào, module nào phụ thuộc module nào? & Component diagram (Hình~\ref{fig:components}) \\
-    Component \& connector (runtime) & Lúc chạy, thành phần nào gọi thành phần nào, theo thứ tự nào? & Sequence diagram (Hình~\ref{fig:seq-login}, \ref{fig:seq-send}) \\
+    Component \& connector (runtime) & Lúc chạy, thành phần nào gọi thành phần nào, theo thứ tự nào? & Sequence diagram (Hình~\ref{fig:seq-login}, \ref{fig:seq-send}, \ref{fig:seq-call}) \\
     Data & Lưu dữ liệu gì, quan hệ ra sao, dữ liệu chảy đi đâu? & ERD (Hình~\ref{fig:erd}), data flow (Hình~\ref{fig:dfd}) \\
     Quy trình (process) & Code đi từ máy dev tới Cloud thế nào? & CI/CD flow (Hình~\ref{fig:cicd}) \\
     \bottomrule
@@ -272,18 +272,19 @@ Theo cách tài liệu hoá ``Views and Beyond''~\cite{clements2010views}, mỗi
     \node[chip] (m6) at (-1.5, -5.0) {realtime};
     \node[chip] (m7) at ( 1.5, -5.0) {activities};
     \node[chip] (m8) at ( 4.5, -5.0) {seed};
-    \node[font=\footnotesize, text=black!60, anchor=west] (note) at (-5.95, -5.65) {Trong mỗi module: 3 lớp đóng, request không bỏ qua lớp nào};
-    \node[layer] (l1) at (-4.1, -6.85) {\textbf{Presentation}\\[-1pt]{\footnotesize resolver $\cdot$ controller\\gateway (WebSocket)}};
-    \node[layer] (l2) at ( 0.0, -6.85) {\textbf{Business}\\[-1pt]{\footnotesize service\\quy tắc nghiệp vụ}};
-    \node[layer] (l3) at ( 4.1, -6.85) {\textbf{Persistence}\\[-1pt]{\footnotesize Mongoose model\\và index}};
+    \node[chip] (m9) at ( 1.5, -5.75) {calls};
+    \node[font=\footnotesize, text=black!60, anchor=west] (note) at (-5.95, -6.25) {Trong mỗi module: 3 lớp đóng, request không bỏ qua lớp nào};
+    \node[layer] (l1) at (-4.1, -7.3) {\textbf{Presentation}\\[-1pt]{\footnotesize resolver $\cdot$ controller\\gateway (WebSocket)}};
+    \node[layer] (l2) at ( 0.0, -7.3) {\textbf{Business}\\[-1pt]{\footnotesize service\\quy tắc nghiệp vụ}};
+    \node[layer] (l3) at ( 4.1, -7.3) {\textbf{Persistence}\\[-1pt]{\footnotesize Mongoose model\\và index}};
     \coordinate (btl) at (-6.1, -3.45);
     \coordinate (btr) at ( 6.1, -3.45);
     \node[draw=black!45, rounded corners=4pt, inner sep=6pt, fit=(btl)(btr)(m1)(m8)(l1)(l3)] (be) {};
     \node[anchor=north west, font=\small\bfseries, inner sep=6pt] at (be.north west)
       {chatter-backend $\cdot$ NestJS modular monolith $\cdot$ cổng 4000 nội bộ};
     % storage
-    \node[box, text width=4cm] (db)   at (-3.0, -9.45) {\textbf{MongoDB 7}\\[-1pt]{\footnotesize volume \texttt{mongodb\_data}}};
-    \node[box, text width=4cm] (disk) at ( 3.0, -9.45) {\textbf{Ổ đĩa (file upload)}\\[-1pt]{\footnotesize volume \texttt{backend\_uploads}}};
+    \node[box, text width=4cm] (db)   at (-3.0, -9.8) {\textbf{MongoDB 7}\\[-1pt]{\footnotesize volume \texttt{mongodb\_data}}};
+    \node[box, text width=4cm] (disk) at ( 3.0, -9.8) {\textbf{Ổ đĩa (file upload)}\\[-1pt]{\footnotesize volume \texttt{backend\_uploads}}};
     % EC2 boundary
     \begin{scope}[on background layer]
       \node[draw=black!40, dashed, rounded corners=5pt, fill=black!3, inner sep=10pt,
@@ -299,7 +300,7 @@ Theo cách tài liệu hoá ``Views and Beyond''~\cite{clements2010views}, mỗi
     \draw[arr] (db.north |- be.south) -- (db.north);
     \draw[arr] (disk.north |- be.south) -- (disk.north);
   \end{tikzpicture}
-  \caption{Kiến trúc triển khai: 2 client, 1 cổng vào, 8 module backend, 3 lớp đóng. Backend và MongoDB chỉ mở trong nội bộ máy chủ, không ra Internet.}
+  \caption{Kiến trúc triển khai: 2 client, 1 cổng vào, 9 module backend, 3 lớp đóng. Backend và MongoDB chỉ mở trong nội bộ máy chủ, không ra Internet.}
   \label{fig:arch}
 \end{figure}
 
@@ -314,8 +315,8 @@ Backend theo đúng 4 lớp chuẩn của layered architecture (Chương 4.3), v
     \toprule
     \textbf{Lớp} & \textbf{Thành phần trong code} & \textbf{Trách nhiệm} \\
     \midrule
-    Presentation & \code{*.resolver.ts} (GraphQL), \code{uploads.controller.ts} (REST), \code{realtime.gateway.ts} (WebSocket) & Nhận request, kiểm tra quyền bằng Guard, đổi dữ liệu sang DTO \\
-    Business & \code{*.service.ts} & Quy tắc nghiệp vụ: kiểm tra thành viên, vai trò nhóm, giới hạn file, ghi nhật ký hoạt động \\
+    Presentation & \code{*.resolver.ts} (GraphQL), \code{uploads.controller.ts} (REST), \code{realtime.gateway.ts} và \code{calls.gateway.ts} (Socket.IO) & Nhận request, kiểm tra quyền bằng Guard, đổi dữ liệu sang DTO \\
+    Business & \code{*.service.ts}, gồm \code{CallsService} & Quy tắc nghiệp vụ: kiểm tra thành viên, vai trò nhóm, cuộc gọi, giới hạn file, ghi nhật ký hoạt động \\
     Persistence & Mongoose model trong \code{schemas/*.schema.ts} & Ánh xạ document, index, truy vấn \\
     Database & MongoDB 7, ổ đĩa (Docker volume) cho file & Lưu trữ \\
     \bottomrule
@@ -324,7 +325,7 @@ Backend theo đúng 4 lớp chuẩn của layered architecture (Chương 4.3), v
 
 Nhóm đã kiểm tra bằng cách quét mã nguồn: \textbf{không resolver hay controller nào inject model trực tiếp}, nên request không thể bỏ qua lớp Business. Đây là một architecture decision (Chương 1.2) giữ ``layers of isolation'': đổi cách lưu dữ liệu không ảnh hưởng lớp giao diện.
 
-Nhưng khác layered thuần, code được \textbf{chia theo nghiệp vụ trước} (domain partitioning) rồi mới chia lớp bên trong mỗi module: \code{auth}, \code{users}, \code{conversations}, \code{messages}, \code{storage}, \code{realtime}, \code{activities}, \code{seed}. Cách này tránh nhược điểm Chương 4.3 nêu ra: một nghiệp vụ bị rải qua mọi lớp.
+Nhưng khác layered thuần, code được \textbf{chia theo nghiệp vụ trước} (domain partitioning) rồi mới chia lớp bên trong mỗi module: \code{auth}, \code{users}, \code{conversations}, \code{messages}, \code{storage}, \code{realtime}, \code{activities}, \code{seed} và \code{calls}. Cách này tránh nhược điểm Chương 4.3 nêu ra: một nghiệp vụ bị rải qua mọi lớp.
 
 \subsection{Ba kênh giao tiếp}
 \label{sec:channels}
@@ -337,7 +338,7 @@ Nhưng khác layered thuần, code được \textbf{chia theo nghiệp vụ trư
     \midrule
     GraphQL \code{/graphql} (12 query, 22 mutation) & Mọi thao tác nghiệp vụ & Client lấy đúng trường cần trong một request; schema có kiểu, sinh từ code \\
     REST multipart \code{/uploads} & Upload và tải file & File nhị phân không phải mã hoá vào JSON; video hỗ trợ HTTP Range để tua \\
-    WebSocket (Socket.IO) & Server đẩy sự kiện: tin mới, thu hồi, cảm xúc, đang gõ, online & Người nhận thấy tin ngay, không phải hỏi lại server liên tục \\
+    WebSocket (Socket.IO) & Server đẩy sự kiện chat, presence và signaling cuộc gọi & Chat và trạng thái cuộc gọi được cập nhật tức thì, không cần polling \\
     \bottomrule
   \end{tabularx}
 \end{table}
@@ -395,7 +396,7 @@ Chi tiết từng trường nằm trong \code{docs/system-data-flow.md} của re
 \subsection{Luồng xử lý chính}
 \label{sec:flows}
 
-Hai sequence diagram dưới đây mô tả hai luồng quan trọng nhất. Mọi request trong đó đều đi qua Nginx (Hình~\ref{fig:arch}); Nginx không được vẽ để sơ đồ gọn.
+Ba sequence diagram dưới đây mô tả các luồng đăng nhập, gửi tin và gọi 1--1. Mọi request trong đó đều đi qua Nginx (Hình~\ref{fig:arch}); Nginx không được vẽ để sơ đồ gọn.
 
 \paragraph{Đăng nhập và mở kết nối realtime (Hình~\ref{fig:seq-login}).} Token cấp một lần qua GraphQL được dùng lại cho kết nối Socket.IO. Khi kết nối, gateway đưa socket vào phòng riêng của người dùng và phòng của từng hội thoại họ đang tham gia.
 
@@ -449,6 +450,39 @@ Hai sequence diagram dưới đây mô tả hai luồng quan trọng nhất. M�
   \end{tikzpicture}
   \caption{Sequence diagram: gửi tin nhắn có ảnh. Ba kênh REST, GraphQL, WebSocket được dùng cho ba việc khác nhau.}
   \label{fig:seq-send}
+\end{figure}
+
+\paragraph{Gọi thoại/video 1--1 (Hình~\ref{fig:seq-call}).} Backend xác thực người dùng và kiểm tra hội thoại trực tiếp cùng hai thành viên đang hoạt động trước khi báo cuộc gọi đến. Sau khi chấp nhận, backend chỉ chuyển tiếp SDP/ICE; media đi trực tiếp giữa hai trình duyệt bằng WebRTC. Khi cuộc gọi kết thúc, backend lưu kết quả vào MongoDB rồi cập nhật lịch sử cho cả hai người.
+
+\begin{figure}[!htb]
+  \centering
+  \begin{tikzpicture}
+    \seqhead{0}{Người gọi\\(Web)}{-12.2}
+    \seqhead{4.2}{Backend\\(Gateway + Service)}{-12.2}
+    \seqhead{8.4}{Người nhận\\(Web)}{-12.2}
+    \seqhead{12.6}{MongoDB}{-12.2}
+    \seqmsg{0}{4.2}{-0.8}{\code{call.invite}}
+    \seqself{4.2}{-1.2}{xác thực JWT, kiểm tra\\người nhận trực tuyến}
+    \seqmsg{4.2}{12.6}{-1.9}{kiểm tra hội thoại và thành viên}
+    \seqret{12.6}{4.2}{-2.55}{hội thoại trực tiếp hợp lệ}
+    \seqmsg{4.2}{8.4}{-3.2}{\code{call.incoming}}
+    \seqmsg{8.4}{4.2}{-3.85}{\code{call.accept}}
+    \seqself{4.2}{-4.25}{kiểm tra người tham gia,\\đánh dấu cuộc gọi active}
+    \seqmsg{4.2}{0}{-4.95}{\code{call.accepted}}
+    \seqmsg{0}{4.2}{-5.6}{\code{call.signal}: SDP offer / ICE}
+    \seqmsg{4.2}{8.4}{-6.25}{chuyển tiếp signaling}
+    \seqmsg{8.4}{4.2}{-6.9}{SDP answer / ICE}
+    \seqmsg{4.2}{0}{-7.55}{chuyển tiếp signaling}
+    \seqmsg{0}{8.4}{-8.2}{media audio/video qua WebRTC P2P}
+    \seqmsg{8.4}{0}{-8.55}{media audio/video qua WebRTC P2P}
+    \seqmsg{0}{4.2}{-9.1}{\code{call.end}}
+    \seqmsg{4.2}{12.6}{-9.75}{lưu bản ghi lịch sử cuộc gọi}
+    \seqret{12.6}{4.2}{-10.4}{đã lưu}
+    \seqret{4.2}{0}{-11.05}{\code{call.ended} + \code{call.history.updated}}
+    \seqret{4.2}{8.4}{-11.7}{\code{call.ended} + \code{call.history.updated}}
+  \end{tikzpicture}
+  \caption{Sequence diagram: gọi 1--1 trên Web. Server xử lý signaling và lịch sử, không nhận media audio/video.}
+  \label{fig:seq-call}
 \end{figure}
 
 \subsection{Luồng dữ liệu cho thống kê}
@@ -559,7 +593,7 @@ Nhóm áp dụng nội dung của cả 4 chương~\cite{phat2025slides}. Mỗi g
 
 \paragraph{Cohesion.} Mỗi module có \emph{functional cohesion}: mọi thành phần phục vụ một nghiệp vụ (ví dụ \code{conversations/} gồm schema, service, resolver, DTO của hội thoại). Ngoại lệ có ý thức là \code{seed/}: \emph{temporal cohesion}, chỉ gồm việc chạy lúc khởi động.
 
-\paragraph{Coupling đo được.} Nhóm đếm import giữa 8 module backend: $C_e$ là số module mà nó phụ thuộc, $C_a$ là số module phụ thuộc vào nó, và
+\paragraph{Coupling đo được.} Nhóm đếm import giữa 8 module backend trong snapshot: $C_e$ là số module mà nó phụ thuộc, $C_a$ là số module phụ thuộc vào nó, và
 \begin{equation}
   I = \frac{C_e}{C_e + C_a}.
 \end{equation}
@@ -731,7 +765,7 @@ Nhận xét theo ngưỡng của Chương 3 ($I$ nên nằm trong 0--0,3 hoặc 
 \section{Code}
 \label{sec:code}
 
-Mã nguồn gồm 3 ứng dụng trong một repo; backend có 8 module nghiệp vụ, khoảng 5.000 dòng TypeScript (không tính test).
+Mã nguồn gồm 3 ứng dụng trong một repo; backend hiện có 9 module nghiệp vụ. Số dòng trong bảng dưới đây được thống kê trước khi bổ sung module \code{calls}.
 
 \begin{table}[H]
   \centering
@@ -740,8 +774,8 @@ Mã nguồn gồm 3 ứng dụng trong một repo; backend có 8 module nghiệp
     \toprule
     \textbf{Thư mục} & \textbf{Nội dung} \\
     \midrule
-    \code{chatter-backend/} & NestJS: GraphQL, REST upload, Socket.IO; Dockerfile build và chạy unit test ngay trong image \\
-    \code{chatter-ui/} & React 19 + Material UI; Nginx vừa phục vụ web vừa làm cổng vào cho API \\
+    \code{chatter-backend/} & NestJS: GraphQL, REST upload, Socket.IO cho chat và signaling cuộc gọi; Dockerfile build và chạy unit test ngay trong image \\
+    \code{chatter-ui/} & React 19 + Material UI; giao diện chat và gọi 1--1; Nginx vừa phục vụ web vừa làm cổng vào cho API \\
     \code{chatter-mobile/} & React Native + Expo (nhánh \code{feature/mobile-app}), cũng chạy được dạng web ở cổng 3001 \\
     \code{scripts/} & Tạo EC2, deploy, xoá tài nguyên AWS \\
     \code{.github/workflows/} & CI và release hằng tuần \\
@@ -753,7 +787,7 @@ Mã nguồn gồm 3 ứng dụng trong một repo; backend có 8 module nghiệp
 \begin{table}[H]
   \centering
   \small
-  \caption{Các module backend (số dòng không tính file test).}
+  \caption{Các module backend (số dòng không tính file test; module \code{calls} được bổ sung sau lần thống kê LOC).}
   \label{tab:modules}
   \begin{tabularx}{\linewidth}{lrY}
     \toprule
@@ -766,12 +800,15 @@ Mã nguồn gồm 3 ứng dụng trong một repo; backend có 8 module nghiệp
     \code{storage} & 642 & Kiểm tra loại, dung lượng và nội dung file; URL có chữ ký; phát video theo HTTP Range \\
     \code{auth} & 475 & Đăng ký/đăng nhập, token HMAC-SHA256, \code{AuthGuard}, \code{AdminGuard} \\
     \code{realtime} & 232 & Gateway Socket.IO: phòng theo hội thoại và người dùng, online, đang gõ \\
+    \code{calls} & -- & Cuộc gọi thoại/video 1--1: signaling WebRTC qua Socket.IO, cấu hình STUN/TURN, lưu lịch sử vào MongoDB \\
     \code{seed} & 207 & Dữ liệu demo: 4 tài khoản, hội thoại mẫu, 7 ngày hoạt động \\
     \bottomrule
   \end{tabularx}
 \end{table}
 
-\textbf{Frontend web} chia theo màn hình: \code{auth/} (đăng nhập, đăng ký, dashboard), \code{chat/} (khung chat 5 loại tin, thông tin nhóm), \code{contacts/}, \code{profile/}, \code{analytics/}, \code{admin/}. Ba service dùng chung: \code{graphql.ts}, \code{uploads.ts}, \code{realtime.ts}.
+\textbf{Frontend web} chia theo màn hình: \code{auth/} (đăng nhập, đăng ký, dashboard), \code{chat/} (khung chat 5 loại tin, thông tin nhóm), \code{contacts/}, \code{profile/}, \code{analytics/}, \code{admin/}. Các service dùng chung gồm \code{graphql.ts}, \code{uploads.ts}, \code{realtime.ts} và \code{calls.ts}.
+
+\textbf{Cuộc gọi Web.} \code{DirectCallDialog} quản lý quyền microphone/camera và kết nối WebRTC 1--1; \code{CallsGateway} xác thực người dùng, chuyển tiếp signaling qua namespace \code{/calls}, còn \code{CallsService} kiểm tra thành viên hội thoại và lưu kết quả cuộc gọi. Lịch sử được truy vấn qua GraphQL và hiển thị cùng dòng thời gian chat.
 
 \textbf{Tài khoản demo} (tự tạo khi khởi động): \code{admin@chatter.vn} / \code{Admin@123456}; \code{minh.nguyen@chatter.vn}, \code{lan.tran@chatter.vn}, \code{huy.le@chatter.vn} / \code{Password@123}.
 
