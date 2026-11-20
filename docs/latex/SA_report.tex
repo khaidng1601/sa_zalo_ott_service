@@ -1,0 +1,969 @@
+% Báo cáo Bài tập lớn Kiến trúc phần mềm — Hệ thống OTT Chatter.
+% Same setup as the Deep Learning reports: bkreport.sty, compile with XeLaTeX (see latexmkrc).
+\documentclass[11pt, a4paper]{article}
+\usepackage{bkreport}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, fit, backgrounds, shapes.geometric, shapes.multipart, calc}
+\tikzset{
+  ubox/.style={draw=black!45, rounded corners=3pt, align=center, inner sep=4pt, font=\footnotesize, fill=white},
+  uarr/.style={->, >=Stealth, draw=black!60, thick},
+  entity/.style={draw=black!50, rectangle split, rectangle split parts=2,
+    rectangle split part fill={bkblue!12, white}, align=left, font=\footnotesize,
+    text width=4.2cm, inner sep=3pt},
+  seqlabel/.style={font=\footnotesize, inner sep=1.5pt, fill=white, align=center}}
+% Sequence diagrams: \seqhead{x}{name}{bottom y}, \seqmsg / \seqret{from x}{to x}{y}{label},
+% \seqself{x}{y}{label} (label to the right), \seqselfl{x}{y}{label} (label to the left).
+\newcommand{\seqhead}[3]{%
+  \node[draw=black!45, rounded corners=2pt, fill=black!4, font=\footnotesize\bfseries, align=center,
+        minimum width=2.2cm, minimum height=0.75cm, inner sep=2pt] at (#1,0) {#2};
+  \draw[black!35, dashed] (#1,-0.38) -- (#1,#3);}
+\newcommand{\seqmsg}[4]{\draw[->, >=Stealth, thick, black!70] (#1,#3) -- node[seqlabel, above] {#4} (#2,#3);}
+\newcommand{\seqret}[4]{\draw[->, >=Stealth, dashed, black!60] (#1,#3) -- node[seqlabel, above] {#4} (#2,#3);}
+\newcommand{\seqself}[3]{%
+  \draw[->, >=Stealth, thick, black!70] (#1,#2) -- ++(0.35,0) -- ++(0,-0.3) -- ++(-0.35,0);
+  \node[seqlabel, anchor=west, align=left] at ($(#1,#2)+(0.42,-0.15)$) {#3};}
+\newcommand{\seqselfl}[3]{%
+  \draw[->, >=Stealth, thick, black!70] (#1,#2) -- ++(-0.35,0) -- ++(0,-0.3) -- ++(0.35,0);
+  \node[seqlabel, anchor=east, align=right] at ($(#1,#2)+(-0.42,-0.15)$) {#3};}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+% Fixed-width column, left-aligned (plain p{} justifies and stretches short lines).
+\newcolumntype{P}[1]{>{\raggedright\arraybackslash}p{#1}}
+
+\renewcommand{\reporttitleshort}{BTL Kiến trúc phần mềm -- Chatter}
+\hypersetup{
+  pdftitle  = {BTL\_Kien\_truc\_phan\_mem\_Chatter\_OTT},
+  pdfauthor = {Nguyen Le Hoang Hung, Nguyen Thi Linh Trang}}
+
+\begin{document}
+\sloppy   % long \code{...} names may not hyphenate: stretch spaces instead of running into the margin
+
+\makecover{Bài tập lớn: Hệ thống OTT giả lập Zalo (Chatter)}
+          {Requirement, design, code, test, deploy và các giải pháp kiến trúc đã áp dụng}
+          {TP. Hồ Chí Minh, ngày 20 tháng 11 năm 2026}
+
+\begin{abstract}
+Nhóm xây dựng Chatter, hệ thống OTT nhắn tin giả lập Zalo gồm ứng dụng web (React), ứng dụng mobile (React Native/Expo) và backend Node.js (NestJS, GraphQL, Socket.IO, MongoDB). Hệ thống đáp ứng đủ ba nhóm chức năng của đề: quản lý tài khoản và nhóm; chat 1-1 và chat nhóm với text, ảnh, video, tài liệu, biểu cảm; thống kê hoạt động người dùng. Backend được thiết kế theo kiểu modular monolith phân lớp với các lớp đóng, triển khai bằng Docker lên AWS EC2 và release tự động hằng tuần bằng GitHub Actions. Hệ thống có 78 test tự động, trong đó 29 test end-to-end chứng minh từng yêu cầu của đề; tin nhắn tới người nhận sau khoảng 32\,ms. Báo cáo trình bày cách áp dụng nội dung Chương 1--4 của môn học, kèm số liệu coupling đo trên mã nguồn thật: ba trong tám module nằm trong vùng Instability nên tránh, và module \code{users} rơi vào ``zone of pain'' do thiếu trừu tượng.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+% =====================================================================
+\section{Thông tin chung}
+
+\begin{table}[H]
+  \centering
+  \small
+  \begin{tabularx}{\linewidth}{lY}
+    \toprule
+    \textbf{Mục} & \textbf{Nội dung} \\
+    \midrule
+    Môn học & Kiến trúc phần mềm (CO5185), lớp MH\_CO5185\_LOP\_1 (Cao học), HK1 2026--2027 \\
+    Đề tài & Xây dựng hệ thống OTT giả lập Zalo~\cite{detai2026} \\
+    Mã nguồn & \url{https://github.com/ntlt/sa_zalo_ott_service} \\
+    Bản chạy trên Cloud & \url{http://3.26.48.153:3000} (web), cổng 3001 (mobile web) \\
+    Công nghệ & NestJS 12 (Node.js 22), GraphQL, Socket.IO, MongoDB 7, React 19, React Native (Expo), Docker, AWS EC2, GitHub Actions \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\subsection{Bảng phân công nhiệm vụ}
+Cột ``Đóng góp chính'' lấy từ lịch sử commit.
+
+\begin{table}[H]
+  \centering
+  \small
+  \begin{tabularx}{\linewidth}{llY}
+    \toprule
+    \textbf{Thành viên} & \textbf{Vai trò} & \textbf{Đóng góp chính} \\
+    \midrule
+    Nguyễn Thị Linh Trang & Nhóm trưởng & Đăng ký tài khoản (MongoDB), đăng nhập JWT, giao diện chat dashboard \\
+    Lê Đức Hoàng Nam & Thành viên & Hiện thực 3 nhóm chức năng bắt buộc (Phase 1 MVP), deploy AWS EC2, app mobile Expo \\
+    Nguyễn Lê Hoàng Hưng & Thành viên & Khởi tạo React UI và NestJS, kiểm thử end-to-end, CI/CD release hằng tuần, bảo mật upload và token, báo cáo kiến trúc \\
+    Nguyễn Đinh Quang Khải & Thành viên & \todo{đóng góp chính} \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+% =====================================================================
+\section{Giới thiệu đề tài}
+
+Mục tiêu là một ứng dụng nhắn tin thời gian thực chạy được trên web và điện thoại, có quản trị và thống kê, được xây dựng qua đủ 5 công đoạn requirement $\rightarrow$ design $\rightarrow$ code $\rightarrow$ test $\rightarrow$ deploy như đề yêu cầu. Báo cáo đi theo 5 công đoạn đó (Mục~\ref{sec:req}--\ref{sec:deploy}); Mục~\ref{sec:solutions} trình bày riêng các giải pháp của môn học (Chương 1--4)~\cite{phat2025slides} đã áp dụng, kèm số liệu đo trên mã nguồn thật.
+
+\textbf{Phạm vi đã làm:}
+\begin{itemize}
+  \item Ba ứng dụng: \code{chatter-backend} (NestJS), \code{chatter-ui} (web React), \code{chatter-mobile} (React Native/Expo, nhánh \code{feature/mobile-app}).
+  \item Ba nhóm chức năng bắt buộc: quản lý tài khoản và nhóm; chat 1-1 và nhóm với 5 loại nội dung; thống kê hoạt động người dùng.
+  \item Triển khai bằng Docker lên AWS EC2, release tự động hằng tuần bằng GitHub Actions.
+\end{itemize}
+
+\textbf{Ngoài phạm vi} (hướng phát triển, Mục~\ref{sec:eval}): gọi thoại/video, đăng nhập bằng QR, thông báo đẩy khi ứng dụng đóng.
+
+\begin{table}[H]
+  \centering
+  \small
+  \caption{Lựa chọn công nghệ (đề cho phép Spring Boot, Node.js, ASP.NET; MySQL hoặc NoSQL).}
+  \label{tab:tech}
+  \begin{tabularx}{\linewidth}{llY}
+    \toprule
+    \textbf{Lựa chọn} & \textbf{Phương án khác} & \textbf{Lý do} \\
+    \midrule
+    Node.js (NestJS) & Spring Boot & Một ngôn ngữ TypeScript cho cả backend, web và mobile; mô hình bất đồng bộ hợp với nhiều kết nối WebSocket \\
+    MongoDB (NoSQL) & MySQL & Tin nhắn có cấu trúc khác nhau theo loại (text, file đính kèm, sticker); cảm xúc lưu nhúng trong tin nhắn; aggregation pipeline đủ cho thống kê \\
+    React + React Native & Angular, Flutter & Dùng chung kiểu dữ liệu và cách gọi API giữa web và mobile \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+% =====================================================================
+\section{Requirement}
+\label{sec:req}
+
+Hệ thống có 3 tác nhân, 3 nhóm yêu cầu chức năng theo đề, và 6 đặc tính kiến trúc được suy ra từ nhu cầu nghiệp vụ.
+
+\subsection{Tác nhân}
+\begin{table}[H]
+  \centering
+  \small
+  \begin{tabularx}{\linewidth}{lY}
+    \toprule
+    \textbf{Tác nhân} & \textbf{Mô tả} \\
+    \midrule
+    Người dùng & Đăng ký, nhắn tin 1-1 và nhóm, gửi file, xem thống kê cá nhân \\
+    Trưởng/phó nhóm & Người dùng có thêm quyền quản lý thành viên trong nhóm của mình \\
+    Quản trị hệ thống (admin) & Khoá/mở tài khoản, đóng nhóm, xem thống kê toàn hệ thống \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[
+      uc/.style={draw=black!50, ellipse, minimum width=3.6cm, minimum height=0.72cm, font=\footnotesize, align=center, inner sep=1pt, fill=white},
+      link/.style={draw=black!55},
+      actor/.pic={\draw[black!70, thick] (0,0.62) circle (0.17) (0,0.45) -- (0,0) (-0.3,0.32) -- (0.3,0.32) (0,0) -- (-0.22,-0.38) (0,0) -- (0.22,-0.38);}]
+    % system boundary
+    \draw[black!45, rounded corners=4pt] (-4.3,4.0) rectangle (4.7,-3.85);
+    \node[font=\small\bfseries, anchor=north west] at (-4.25,3.95) {Hệ thống Chatter};
+    % actors
+    \pic at (-6.2,1.3) {actor}; \node[font=\footnotesize, align=center] (uA) at (-6.2,0.55) {Người dùng};
+    \pic at (-6.2,-2.1) {actor}; \node[font=\footnotesize, align=center] (gA) at (-6.2,-2.85) {Trưởng/phó\\nhóm};
+    \pic at (6.6,0.2) {actor}; \node[font=\footnotesize, align=center] (aA) at (6.6,-0.55) {Quản trị\\hệ thống};
+    \coordinate (u) at (-5.85,1.55); \coordinate (g) at (-5.85,-1.85); \coordinate (a) at (6.25,0.45);
+    % generalization: group admin is a user
+    \draw[-{Triangle[open, length=7pt, width=7pt]}, black!60] (-6.2,-1.35) -- (-6.2,0.3);
+    % user use cases
+    \node[uc] (uc1) at (-1.9, 2.95) {Đăng ký, đăng nhập};
+    \node[uc] (uc2) at (-1.9, 1.95) {Quản lý hồ sơ, danh bạ};
+    \node[uc] (uc3) at (-1.9, 0.95) {Chat 1-1};
+    \node[uc] (uc4) at (-1.9,-0.05) {Chat nhóm, tạo nhóm};
+    \node[uc] (uc5) at (-1.9,-1.15) {Gửi text, ảnh, video,\\tài liệu, biểu cảm};
+    \node[uc] (uc6) at (-1.9,-2.25) {Xem thống kê cá nhân};
+    \node[uc] (uc7) at (-1.9,-3.25) {Quản lý thành viên nhóm};
+    % admin use cases
+    \node[uc] (uc8) at (2.6, 1.3) {Khoá/mở, phân quyền\\tài khoản};
+    \node[uc] (uc9) at (2.6, 0.1) {Xem và đóng nhóm};
+    \node[uc] (uc10) at (2.6,-1.1) {Thống kê toàn hệ thống};
+    \foreach \t in {uc1,uc2,uc3,uc4,uc5,uc6} \draw[link] (u) -- (\t.west);
+    \draw[link] (g) -- (uc7.west);
+    \foreach \t in {uc8,uc9,uc10} \draw[link] (a) -- (\t.east);
+  \end{tikzpicture}
+  \caption{Use case diagram. Trưởng/phó nhóm là người dùng có thêm quyền quản lý thành viên (mũi tên tam giác rỗng: kế thừa mọi use case của người dùng).}
+  \label{fig:usecase}
+\end{figure}
+
+\subsection{Yêu cầu chức năng}
+\begin{table}[H]
+  \centering
+  \small
+  \caption{Yêu cầu chức năng, ánh xạ từ đề bài.}
+  \label{tab:fr}
+  \begin{tabularx}{\linewidth}{llY}
+    \toprule
+    \textbf{Mã} & \textbf{Yêu cầu theo đề} & \textbf{Chức năng cụ thể} \\
+    \midrule
+    FR-1 & Quản lý tài khoản & Đăng ký, đăng nhập, sửa hồ sơ và avatar, đổi mật khẩu, tìm người dùng, danh bạ; admin khoá/mở và phân quyền \\
+    FR-2 & Quản lý danh sách nhóm & Tạo nhóm (tối đa 100 thành viên), thêm/xoá thành viên, phó nhóm, chuyển trưởng nhóm, đổi tên, rời nhóm; admin xem và đóng nhóm \\
+    FR-3 & Chat 1-1 và chat nhóm & Lịch sử có phân trang, trả lời tin, thu hồi, đã đọc, đang gõ, trạng thái online, nhận tin tức thì \\
+    FR-3.1 & Text & Tối đa 4.000 ký tự \\
+    FR-3.2 & Image & JPEG/PNG/GIF/WEBP, tối đa 10\,MB, xem phóng to \\
+    FR-3.3 & Video & MP4/WEBM/MOV, tối đa 50\,MB, phát và tua trực tiếp \\
+    FR-3.4 & Document & PDF, Word, Excel, PowerPoint, TXT, CSV, ZIP, tối đa 25\,MB \\
+    FR-3.5 & Emotion & Sticker/emoji gửi riêng và thả cảm xúc lên tin nhắn \\
+    FR-4 & Thống kê hoạt động & Admin: số tài khoản, DAU/MAU, tin nhắn theo ngày và theo 5 loại, dung lượng media, nhóm sôi nổi nhất. Người dùng: thống kê 7 ngày của mình \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\subsection{Đặc tính kiến trúc (architecture characteristics)}
+\label{sec:characteristics}
+Theo Chương 1, đặc tính kiến trúc là tiêu chí thành công độc lập với chức năng~\cite{richards2020fundamentals}. Theo Chương 3, chúng được dịch từ business driver. Nhóm chọn 6 đặc tính, xếp theo độ ưu tiên (Bảng~\ref{tab:chars}).
+
+\begin{table}[H]
+  \centering
+  \small
+  \caption{Sáu đặc tính kiến trúc, xếp theo độ ưu tiên.}
+  \label{tab:chars}
+  \begin{tabularx}{\linewidth}{clYY}
+    \toprule
+    \textbf{\#} & \textbf{Đặc tính} & \textbf{Business driver} & \textbf{Tiêu chí đo được} \\
+    \midrule
+    1 & Responsiveness & App nhắn tin chậm là mất người dùng & Tin tới người nhận $<150$\,ms trong mạng LAN \\
+    2 & Security & Tin nhắn và file là dữ liệu riêng tư & Chỉ thành viên đọc được hội thoại và file; tài khoản bị khoá mất quyền ngay \\
+    3 & Deployability & Đề yêu cầu release lên Cloud theo tuần & Deploy bằng 1 lệnh hoặc tự động; có kiểm tra health sau deploy \\
+    4 & Testability & Nhóm nhỏ, nhiều người sửa cùng code & Mỗi yêu cầu có test tự động; CI chạy mỗi lần push \\
+    5 & Modifiability & Thêm loại tin, chỉ số thống kê, client mới (mobile) & Thêm client mobile không phải sửa backend \\
+    6 & Availability & Demo và chấm bài trên Cloud & Container tự khởi động lại; dữ liệu nằm trên volume riêng \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+Scalability (chịu hàng triệu người dùng) \textbf{cố ý không nằm trong danh sách}: tải thật là một lớp học, và theo luật thứ nhất của kiến trúc (``mọi thứ đều là đánh đổi''), đổi lại nó bằng độ phức tạp của hệ phân tán là không đáng (Mục~\ref{sec:ch3}).
+
+% =====================================================================
+\section{Design}
+\label{sec:design}
+
+Hệ thống là kiến trúc client/server ba tầng: hai client (web, mobile) $\rightarrow$ một backend \textbf{modular monolith phân lớp} $\rightarrow$ MongoDB, tất cả đi qua một cổng Nginx duy nhất (Hình~\ref{fig:arch}).
+
+Theo cách tài liệu hoá ``Views and Beyond''~\cite{clements2010views}, mỗi góc nhìn trả lời một câu hỏi khác nhau, nên được vẽ bằng một loại sơ đồ riêng (Bảng~\ref{tab:views}).
+
+\begin{table}[H]
+  \centering
+  \small
+  \caption{Các góc nhìn kiến trúc và sơ đồ tương ứng trong báo cáo.}
+  \label{tab:views}
+  \begin{tabularx}{\linewidth}{P{3.4cm}YP{4.2cm}}
+    \toprule
+    \textbf{Góc nhìn} & \textbf{Câu hỏi được trả lời} & \textbf{Sơ đồ} \\
+    \midrule
+    Use case (kịch bản) & Ai dùng hệ thống để làm gì? & Use case diagram (Hình~\ref{fig:usecase}) \\
+    Allocation / deployment & Phần mềm chạy ở đâu, qua cổng nào? & Kiến trúc triển khai (Hình~\ref{fig:arch}) \\
+    Module & Code chia thành những module nào, module nào phụ thuộc module nào? & Component diagram (Hình~\ref{fig:components}) \\
+    Component \& connector (runtime) & Lúc chạy, thành phần nào gọi thành phần nào, theo thứ tự nào? & Sequence diagram (Hình~\ref{fig:seq-login}, \ref{fig:seq-send}) \\
+    Data & Lưu dữ liệu gì, quan hệ ra sao, dữ liệu chảy đi đâu? & ERD (Hình~\ref{fig:erd}), data flow (Hình~\ref{fig:dfd}) \\
+    Quy trình (process) & Code đi từ máy dev tới Cloud thế nào? & CI/CD flow (Hình~\ref{fig:cicd}) \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\begin{figure}[!tb]
+  \centering
+  \begin{tikzpicture}[
+      font=\small, >=Stealth,
+      box/.style={draw=black!45, rounded corners=3pt, align=center, inner sep=5pt},
+      chip/.style={draw=black!35, rounded corners=3pt, minimum width=2.7cm, minimum height=0.6cm, font=\small\ttfamily},
+      layer/.style={box, text width=3.4cm, minimum height=1.55cm},
+      arr/.style={->, draw=black!55, thick}]
+    % clients
+    \node[box, text width=4.4cm] (web) at (-3.3, 0.35) {\textbf{Web $\cdot$ chatter-ui}\\[-1pt]{\footnotesize React 19 + Material UI}};
+    \node[box, text width=4.4cm] (mob) at ( 3.3, 0.35) {\textbf{Mobile $\cdot$ chatter-mobile}\\[-1pt]{\footnotesize React Native + Expo}};
+    \node[font=\footnotesize, text=black!60] at (0, -0.6) {HTTP: GraphQL $\cdot$ REST $\cdot$ WebSocket};
+    % gateway
+    \node[box, draw=bkblue, thick, fill=bkblue!8, text width=9cm] (nginx) at (0, -2.3)
+      {\textbf{Nginx $\cdot$ cổng vào duy nhất (cổng 80, 3000)}\\[-1pt]{\footnotesize \texttt{/graphql} $\cdot$ \texttt{/uploads} $\cdot$ \texttt{/socket.io} $\rightarrow$ backend}};
+    % backend modules
+    \node[chip] (m1) at (-4.5, -4.25) {auth};
+    \node[chip] (m2) at (-1.5, -4.25) {users};
+    \node[chip] (m3) at ( 1.5, -4.25) {conversations};
+    \node[chip] (m4) at ( 4.5, -4.25) {messages};
+    \node[chip] (m5) at (-4.5, -5.0) {storage};
+    \node[chip] (m6) at (-1.5, -5.0) {realtime};
+    \node[chip] (m7) at ( 1.5, -5.0) {activities};
+    \node[chip] (m8) at ( 4.5, -5.0) {seed};
+    \node[font=\footnotesize, text=black!60, anchor=west] (note) at (-5.95, -5.65) {Trong mỗi module: 3 lớp đóng, request không bỏ qua lớp nào};
+    \node[layer] (l1) at (-4.1, -6.85) {\textbf{Presentation}\\[-1pt]{\footnotesize resolver $\cdot$ controller\\gateway (WebSocket)}};
+    \node[layer] (l2) at ( 0.0, -6.85) {\textbf{Business}\\[-1pt]{\footnotesize service\\quy tắc nghiệp vụ}};
+    \node[layer] (l3) at ( 4.1, -6.85) {\textbf{Persistence}\\[-1pt]{\footnotesize Mongoose model\\và index}};
+    \coordinate (btl) at (-6.1, -3.45);
+    \coordinate (btr) at ( 6.1, -3.45);
+    \node[draw=black!45, rounded corners=4pt, inner sep=6pt, fit=(btl)(btr)(m1)(m8)(l1)(l3)] (be) {};
+    \node[anchor=north west, font=\small\bfseries, inner sep=6pt] at (be.north west)
+      {chatter-backend $\cdot$ NestJS modular monolith $\cdot$ cổng 4000 nội bộ};
+    % storage
+    \node[box, text width=4cm] (db)   at (-3.0, -9.45) {\textbf{MongoDB 7}\\[-1pt]{\footnotesize volume \texttt{mongodb\_data}}};
+    \node[box, text width=4cm] (disk) at ( 3.0, -9.45) {\textbf{Ổ đĩa (file upload)}\\[-1pt]{\footnotesize volume \texttt{backend\_uploads}}};
+    % EC2 boundary
+    \begin{scope}[on background layer]
+      \node[draw=black!40, dashed, rounded corners=5pt, fill=black!3, inner sep=10pt,
+            fit=(nginx)(be)(db)(disk),
+            label={[anchor=south west, font=\footnotesize\bfseries, text=black!60, inner sep=2pt]north west:AWS EC2 $\cdot$ Docker Compose}] (ec2) {};
+    \end{scope}
+    % arrows
+    \draw[arr] (web.south) -- (web.south |- nginx.north);
+    \draw[arr] (mob.south) -- (mob.south |- nginx.north);
+    \draw[arr] (nginx.south) -- (nginx.south |- be.north);
+    \draw[arr] (l1.east) -- (l2.west);
+    \draw[arr] (l2.east) -- (l3.west);
+    \draw[arr] (db.north |- be.south) -- (db.north);
+    \draw[arr] (disk.north |- be.south) -- (disk.north);
+  \end{tikzpicture}
+  \caption{Kiến trúc triển khai: 2 client, 1 cổng vào, 8 module backend, 3 lớp đóng. Backend và MongoDB chỉ mở trong nội bộ máy chủ, không ra Internet.}
+  \label{fig:arch}
+\end{figure}
+
+\subsection{Các lớp bên trong backend}
+\label{sec:layers}
+Backend theo đúng 4 lớp chuẩn của layered architecture (Chương 4.3), và các lớp đều \textbf{đóng} (closed layer).
+
+\begin{table}[H]
+  \centering
+  \small
+  \begin{tabularx}{\linewidth}{lYY}
+    \toprule
+    \textbf{Lớp} & \textbf{Thành phần trong code} & \textbf{Trách nhiệm} \\
+    \midrule
+    Presentation & \code{*.resolver.ts} (GraphQL), \code{uploads.controller.ts} (REST), \code{realtime.gateway.ts} (WebSocket) & Nhận request, kiểm tra quyền bằng Guard, đổi dữ liệu sang DTO \\
+    Business & \code{*.service.ts} & Quy tắc nghiệp vụ: kiểm tra thành viên, vai trò nhóm, giới hạn file, ghi nhật ký hoạt động \\
+    Persistence & Mongoose model trong \code{schemas/*.schema.ts} & Ánh xạ document, index, truy vấn \\
+    Database & MongoDB 7, ổ đĩa (Docker volume) cho file & Lưu trữ \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+Nhóm đã kiểm tra bằng cách quét mã nguồn: \textbf{không resolver hay controller nào inject model trực tiếp}, nên request không thể bỏ qua lớp Business. Đây là một architecture decision (Chương 1.2) giữ ``layers of isolation'': đổi cách lưu dữ liệu không ảnh hưởng lớp giao diện.
+
+Nhưng khác layered thuần, code được \textbf{chia theo nghiệp vụ trước} (domain partitioning) rồi mới chia lớp bên trong mỗi module: \code{auth}, \code{users}, \code{conversations}, \code{messages}, \code{storage}, \code{realtime}, \code{activities}, \code{seed}. Cách này tránh nhược điểm Chương 4.3 nêu ra: một nghiệp vụ bị rải qua mọi lớp.
+
+\subsection{Ba kênh giao tiếp}
+\label{sec:channels}
+\begin{table}[H]
+  \centering
+  \small
+  \begin{tabularx}{\linewidth}{lYY}
+    \toprule
+    \textbf{Kênh} & \textbf{Dùng cho} & \textbf{Lý do} \\
+    \midrule
+    GraphQL \code{/graphql} (12 query, 22 mutation) & Mọi thao tác nghiệp vụ & Client lấy đúng trường cần trong một request; schema có kiểu, sinh từ code \\
+    REST multipart \code{/uploads} & Upload và tải file & File nhị phân không phải mã hoá vào JSON; video hỗ trợ HTTP Range để tua \\
+    WebSocket (Socket.IO) & Server đẩy sự kiện: tin mới, thu hồi, cảm xúc, đang gõ, online & Người nhận thấy tin ngay, không phải hỏi lại server liên tục \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\subsection{Mô hình dữ liệu}
+\label{sec:data}
+
+Dữ liệu gồm 6 collection MongoDB (Hình~\ref{fig:erd}). Quan hệ được giữ bằng id tham chiếu; riêng file đính kèm và cảm xúc được \emph{nhúng} trong tin nhắn vì luôn được đọc cùng tin.
+
+\begin{figure}[!htb]
+  \centering
+  \begin{tikzpicture}[rel/.style={draw=black!60, thick}, card/.style={font=\scriptsize\bfseries, text=black!70, inner sep=1pt}]
+    \node[entity, anchor=north] (users) at (-5.5,3) {\textbf{users}
+      \nodepart{second}\code{\_id} (PK)\\ \code{email} (unique)\\ \code{passwordHash} (ẩn)\\ \code{displayName}, \code{avatarUrl}\\ \code{role}: user | admin\\ \code{status}: active | disabled\\ \code{lastSeenAt}};
+    \node[entity, anchor=north] (members) at (0,3) {\textbf{conversationMembers}
+      \nodepart{second}\code{conversationId} (FK)\\ \code{userId} (FK)\\ \code{role}: owner | admin | member\\ \code{status}: active | left | removed\\ \code{joinedAt}, \code{leftAt}\\ \code{lastReadAt}};
+    \node[entity, anchor=north] (convs) at (5.5,3) {\textbf{conversations}
+      \nodepart{second}\code{\_id} (PK)\\ \code{type}: direct | group\\ \code{title}\\ \code{createdBy} $\rightarrow$ users\\ \code{directKey} (unique)\\ \code{lastMessageAt}\\ \code{lastMessagePreview}\\ \code{closedAt}};
+    \node[entity, anchor=north] (contacts) at (-5.5,-2.0) {\textbf{contacts}
+      \nodepart{second}\code{ownerId} (FK)\\ \code{contactUserId} (FK)\\ unique(\code{ownerId}, \code{contactUserId})};
+    \node[entity, anchor=north] (acts) at (0,-2.0) {\textbf{userActivities}
+      \nodepart{second}\code{actorId} (FK)\\ \code{type}: 9 loại sự kiện\\ \code{conversationId}, \code{targetUserId}\\ \code{metadata} (không chứa nội dung)\\ \code{occurredAt}};
+    \node[entity, anchor=north] (msgs) at (5.5,-2.0) {\textbf{messages}
+      \nodepart{second}\code{\_id} (PK)\\ \code{conversationId} (FK)\\ \code{senderId} $\rightarrow$ users\\ \code{kind}: text | image | video |\\ \quad document | emotion | system\\ \code{text}, \code{stickerCode}\\ \code{attachments[]} (nhúng)\\ \code{reactions[]} (nhúng)\\ \code{replyToId} $\rightarrow$ messages\\ \code{deletedAt}, \code{deletedBy}};
+    % relations (1 -- N)
+    \draw[rel] ($(users.north east)+(0,-0.75)$) -- node[card, pos=0.12, above] {1} node[card, pos=0.88, above] {N} ($(members.north west)+(0,-0.75)$);
+    \draw[rel] ($(convs.north west)+(0,-0.75)$) -- node[card, pos=0.12, above] {1} node[card, pos=0.88, above] {N} ($(members.north east)+(0,-0.75)$);
+    \draw[rel] (users.south) -- node[card, pos=0.15, right] {1} node[card, pos=0.8, right] {N} (contacts.north);
+    \draw[rel] (convs.south) -- node[card, pos=0.15, right] {1} node[card, pos=0.8, right] {N} (msgs.north);
+    \draw[rel] (users.south east) -- node[card, pos=0.2, above right] {1} node[card, pos=0.85, above right] {N} (acts.north west);
+  \end{tikzpicture}
+  \caption{ERD của 6 collection. PK: khoá chính, FK: id tham chiếu tới collection khác; ``$\rightarrow$'' là tham chiếu không vẽ đường để sơ đồ gọn. \code{contacts} có hai tham chiếu tới \code{users} (chủ danh bạ và người trong danh bạ).}
+  \label{fig:erd}
+\end{figure}
+
+\begin{table}[H]
+  \centering
+  \small
+  \begin{tabularx}{\linewidth}{lYY}
+    \toprule
+    \textbf{Collection} & \textbf{Nội dung} & \textbf{Quyết định thiết kế} \\
+    \midrule
+    \code{users} & Tài khoản, vai trò, trạng thái & \code{passwordHash} không bao giờ được trả về (\code{select: false}) \\
+    \code{contacts} & Danh bạ & Index duy nhất \code{(ownerId, contactUserId)} \\
+    \code{conversations} & Hội thoại 1-1 hoặc nhóm & Lưu sẵn \code{lastMessagePreview} để danh sách chat chỉ cần 1 truy vấn \\
+    \code{conversationMembers} & Thành viên, vai trò, lần đọc cuối & Tách riêng để nhóm 100 người không làm document hội thoại phình to \\
+    \code{messages} & Tin nhắn 5 loại & Cảm xúc nhúng trong tin; thu hồi bằng \code{deletedAt}; index \code{(conversationId, createdAt, \_id)} cho phân trang \\
+    \code{userActivities} & Nhật ký hoạt động & Không lưu nội dung tin nhắn hay mật khẩu; nguồn cho thống kê \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+Chi tiết từng trường nằm trong \code{docs/system-data-flow.md} của repo.
+
+\subsection{Luồng xử lý chính}
+\label{sec:flows}
+
+Hai sequence diagram dưới đây mô tả hai luồng quan trọng nhất. Mọi request trong đó đều đi qua Nginx (Hình~\ref{fig:arch}); Nginx không được vẽ để sơ đồ gọn.
+
+\paragraph{Đăng nhập và mở kết nối realtime (Hình~\ref{fig:seq-login}).} Token cấp một lần qua GraphQL được dùng lại cho kết nối Socket.IO. Khi kết nối, gateway đưa socket vào phòng riêng của người dùng và phòng của từng hội thoại họ đang tham gia.
+
+\begin{figure}[!htb]
+  \centering
+  \begin{tikzpicture}
+    \seqhead{0}{Client\\(web/mobile)}{-9.9}
+    \seqhead{3.8}{AuthService\\(GraphQL)}{-9.9}
+    \seqhead{7.6}{MongoDB}{-9.9}
+    \seqhead{11.4}{Realtime\\Gateway}{-9.9}
+    \seqmsg{0}{3.8}{-0.9}{\code{login(email, mật khẩu)}}
+    \seqmsg{3.8}{7.6}{-1.65}{tìm user theo email}
+    \seqret{7.6}{3.8}{-2.4}{user + \code{passwordHash}}
+    \seqself{3.8}{-2.9}{so khớp \code{scrypt},\\tài khoản active?}
+    \seqmsg{3.8}{7.6}{-4.0}{ghi \code{login.succeeded}}
+    \seqret{3.8}{0}{-4.75}{\code{accessToken} (8 giờ) + user}
+    \seqmsg{0}{11.4}{-5.6}{kết nối Socket.IO, \code{auth.token}}
+    \seqselfl{11.4}{-6.1}{kiểm tra chữ ký token,\\user còn active?}
+    \seqmsg{11.4}{7.6}{-7.2}{hội thoại đang tham gia}
+    \seqret{7.6}{11.4}{-7.95}{danh sách \code{conversationId}}
+    \seqselfl{11.4}{-8.45}{join \code{user:<id>},\\\code{conversation:<id>}}
+    \seqret{11.4}{0}{-9.55}{\code{presence.snapshot} (ai đang online)}
+  \end{tikzpicture}
+  \caption{Sequence diagram: đăng nhập và mở kết nối realtime. Token sai hoặc tài khoản bị khoá thì socket bị ngắt ngay (đã có test e2e).}
+  \label{fig:seq-login}
+\end{figure}
+
+\paragraph{Gửi tin nhắn có ảnh (Hình~\ref{fig:seq-send}).} File đi qua REST, tin nhắn đi qua GraphQL, thông báo đi qua WebSocket: mỗi kênh làm đúng một việc (Mục~\ref{sec:channels}). \code{MessagesService} lưu tin trước rồi mới phát sự kiện, nên nếu WebSocket rớt thì tin vẫn không mất; client tải lại qua GraphQL là đủ. Sự kiện được phát tới phòng \code{user:<id>} của từng thành viên, nên một người mở nhiều tab hay nhiều thiết bị đều nhận được.
+
+\begin{figure}[!htb]
+  \centering
+  \begin{tikzpicture}
+    \seqhead{0}{Người gửi}{-10.1}
+    \seqhead{2.7}{Storage\\(REST)}{-10.1}
+    \seqhead{5.4}{Messages\\(GraphQL)}{-10.1}
+    \seqhead{8.1}{MongoDB\\+ ổ đĩa}{-10.1}
+    \seqhead{10.8}{Realtime\\Gateway}{-10.1}
+    \seqhead{13.5}{Người nhận}{-10.1}
+    \seqmsg{0}{2.7}{-0.9}{\code{POST /uploads}}
+    \seqself{2.7}{-1.35}{thành viên? loại, dung lượng,\\nội dung file (magic bytes)}
+    \seqmsg{2.7}{8.1}{-2.45}{lưu file}
+    \seqret{2.7}{0}{-3.2}{\code{storageKey}}
+    \seqmsg{0}{5.4}{-4.0}{\code{sendMessage(IMAGE, storageKey)}}
+    \seqmsg{5.4}{8.1}{-4.75}{lưu tin + \code{message.sent}}
+    \seqmsg{5.4}{10.8}{-5.55}{\code{emitToUsers}(thành viên)}
+    \seqret{10.8}{13.5}{-6.3}{\code{message.created}}
+    \seqret{5.4}{0}{-7.05}{tin nhắn đã lưu}
+    \seqmsg{13.5}{2.7}{-7.85}{\code{GET} URL có chữ ký HMAC}
+    \seqself{2.7}{-8.3}{chữ ký đúng, chưa hết hạn?}
+    \seqret{2.7}{13.5}{-9.4}{nội dung ảnh}
+  \end{tikzpicture}
+  \caption{Sequence diagram: gửi tin nhắn có ảnh. Ba kênh REST, GraphQL, WebSocket được dùng cho ba việc khác nhau.}
+  \label{fig:seq-send}
+\end{figure}
+
+\subsection{Luồng dữ liệu cho thống kê}
+\label{sec:dataflow}
+
+Thống kê không đọc thẳng từ luồng chat. Mỗi service nghiệp vụ ghi một sự kiện gọn vào \code{userActivities}; module thống kê chỉ đọc từ đó và từ các collection chính bằng aggregation pipeline (Hình~\ref{fig:dfd}). Nhờ vậy thêm một chỉ số mới không phải sửa code chat.
+
+\begin{figure}[!htb]
+  \centering
+  \begin{tikzpicture}[
+      proc/.style={draw=black!55, circle, align=center, font=\footnotesize, minimum size=2.3cm, inner sep=1pt, fill=white},
+      ext/.style={draw=black!55, align=center, font=\footnotesize, minimum width=2.1cm, minimum height=1cm, fill=black!4},
+      store/.style={align=center, font=\footnotesize, minimum width=2.9cm, minimum height=0.8cm},
+      flow/.style={->, >=Stealth, draw=black!60, thick},
+      flab/.style={font=\scriptsize, fill=white, inner sep=1pt, align=center}]
+    \node[ext] (user) at (0,0) {Người dùng};
+    \node[proc] (p1) at (3.2,0) {Service\\nghiệp vụ\\{\scriptsize auth, conversations,}\\{\scriptsize messages, storage}};
+    \node[store] (d1) at (7.0,0.95) {D1 \code{userActivities}};
+    \node[store] (d2) at (7.0,-1.15) {D2 \code{users}, \code{messages},\\\code{conversations}, \dots};
+    \node[proc, fill=bkblue!8, draw=bkblue] (p2) at (10.7,0) {Thống kê\\{\scriptsize aggregation}\\{\scriptsize pipeline}};
+    \node[ext] (dash) at (13.7,0) {Dashboard\\thống kê};
+    \foreach \d in {d1,d2} {
+      \draw[black!55] (\d.north west) -- (\d.north east) (\d.south west) -- (\d.south east) (\d.north west) -- (\d.south west);}
+    \draw[flow] (user) -- node[flab, above=2pt] {thao tác} (p1);
+    \draw[flow] (p1.30) -- node[flab, above, sloped] {sự kiện} (d1.west);
+    \draw[flow] (p1.-30) -- node[flab, below, sloped] {dữ liệu} (d2.west);
+    \draw[flow] (d1.east) -- node[flab, above, sloped] {\code{\$match}} (p2.150);
+    \draw[flow] (d2.east) -- node[flab, below, sloped] {đếm, nhóm} (p2.-150);
+    \draw[flow] (p2) -- node[flab, above=2pt] {GraphQL} (dash);
+  \end{tikzpicture}
+  \caption{Data flow diagram của thống kê. Hình tròn: xử lý; hình chữ nhật xám: tác nhân ngoài; hai gạch ngang: kho dữ liệu. Sự kiện chỉ chứa loại, thời điểm và metadata an toàn, không chứa nội dung tin nhắn hay mật khẩu.}
+  \label{fig:dfd}
+\end{figure}
+
+% =====================================================================
+\section{Các giải pháp của môn học đã áp dụng}
+\label{sec:solutions}
+
+Nhóm áp dụng nội dung của cả 4 chương~\cite{phat2025slides}. Mỗi giải pháp dưới đây đều chỉ ra vị trí trong code; phần đo modularity (Mục~\ref{sec:ch3}) dùng số liệu đo trên mã nguồn backend thật, kể cả những chỗ chưa tốt.
+
+\subsection{Chương 1: Định nghĩa kiến trúc và tách biệt mối quan tâm}
+
+\begin{table}[H]
+  \centering
+  \small
+  \caption{Bốn chiều của kiến trúc Chatter, theo Richards và Ford~\cite{richards2020fundamentals}.}
+  \label{tab:4dim}
+  \begin{tabularx}{\linewidth}{lY}
+    \toprule
+    \textbf{Chiều} & \textbf{Trong Chatter} \\
+    \midrule
+    Structure (kiểu kiến trúc) & Client/server ba tầng; backend là modular monolith phân lớp (Mục~\ref{sec:design}) \\
+    Architecture characteristics & Responsiveness, security, deployability, testability, modifiability, availability (Bảng~\ref{tab:chars}) \\
+    Architecture decisions (quy tắc bắt buộc) & Resolver/controller không truy cập database trực tiếp; mọi file phải đi qua \code{StorageService}; chỉ Nginx được mở ra Internet; lưu trước rồi mới phát sự kiện realtime \\
+    Design principles (hướng dẫn) & Mỗi module một nghiệp vụ; dữ liệu nhị phân không đi qua GraphQL; nhật ký hoạt động không chứa nội dung riêng tư \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\textbf{Hai luật của kiến trúc.} Mọi quyết định lớn đều ghi lại cái được, cái mất và lý do (``why'' quan trọng hơn ``how''), xem Bảng~\ref{tab:tradeoffs}.
+
+\textbf{Separation of concerns.} Quy tắc nghiệp vụ nằm trong service, không phụ thuộc giao diện: cùng một backend phục vụ cả web React lẫn app mobile mà không sửa dòng nào. Đây là đặc tính ``independent of the UI'' và ``testable'' theo Martin~\cite{martin2017clean}.
+
+\textbf{Giao thoa với DevOps, quy trình và dữ liệu.} Kiến trúc bao gồm cả vận hành: Dockerfile, health check, CI/CD và release hằng tuần là một phần của thiết kế (Mục~\ref{sec:deploy}). Về dữ liệu, nhóm chọn NoSQL và thiết kế collection theo cách truy vấn (Mục~\ref{sec:design}).
+
+\subsection{Chương 2: Nguyên lý SOLID}
+
+\begin{table}[H]
+  \centering
+  \small
+  \caption{Áp dụng SOLID trong backend.}
+  \label{tab:solid}
+  \begin{tabularx}{\linewidth}{P{2.6cm}YP{3cm}}
+    \toprule
+    \textbf{Nguyên lý} & \textbf{Áp dụng trong code} & \textbf{Mức độ} \\
+    \midrule
+    \textbf{SRP}: một lý do để thay đổi & \code{AuthTokenService} chỉ cấp/kiểm tra token, tách khỏi \code{AuthService} (đăng ký/đăng nhập); \code{password.ts} chỉ băm mật khẩu. Đổi thuật toán token không đụng tới luồng đăng nhập & Đạt \\
+    \textbf{OCP}: mở để mở rộng, đóng để sửa & Phân quyền bằng \code{@UseGuards(AuthGuard, AdminGuard)}: thêm quyền mới là thêm guard, không sửa resolver. Bảng \code{CONTENT\_SIGNATURES} trong \code{StorageService}: thêm loại file là thêm một dòng, không sửa hàm kiểm tra & Đạt một phần: thêm loại tin mới vẫn phải sửa \code{MessagesService} \\
+    \textbf{LSP}: lớp con thay được lớp cha & \code{AuthGuard} và \code{AdminGuard} cùng implement \code{CanActivate}; NestJS gọi chúng như nhau, ghép theo thứ tự bất kỳ mà không sai logic & Đạt \\
+    \textbf{ISP}: interface nhỏ, đúng nhu cầu & Mỗi thao tác có input riêng (\code{SendMessageInput}, \code{CreateGroupInput}, \code{UpdateProfileInput}) thay vì một DTO lớn; GraphQL cho client chỉ chọn trường cần dùng; mỗi module chỉ export service của nó & Đạt \\
+    \textbf{DIP}: phụ thuộc vào trừu tượng & Phụ thuộc được inject qua constructor (IoC của NestJS), nhờ vậy 5 file unit test thay chúng bằng mock. Tuy nhiên service phụ thuộc vào \textbf{lớp cụ thể}, chưa qua interface & Đạt một phần (Mục~\ref{sec:ch3}) \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\subsection{Chương 3: Tư duy kiến trúc và modularity}
+\label{sec:ch3}
+
+\paragraph{Phân tích đánh đổi.} Câu trả lời cho mọi câu hỏi kiến trúc là ``tuỳ'' (it depends): vào quy mô nhóm, thời hạn, kỹ năng. Bảng~\ref{tab:tradeoffs} ghi lại các quyết định chính.
+
+\begin{table}[H]
+  \centering
+  \small
+  \caption{Các quyết định kiến trúc chính và đánh đổi.}
+  \label{tab:tradeoffs}
+  \begin{tabularx}{\linewidth}{P{2.8cm}YYY}
+    \toprule
+    \textbf{Quyết định} & \textbf{Được} & \textbf{Mất} & \textbf{Vì sao chấp nhận} \\
+    \midrule
+    Monolith thay vì microservices & Một image, gọi hàm thay vì gọi mạng, debug dễ & Không scale riêng từng phần & Nhóm 3--4 người, 11 tuần, tải cỡ lớp học (simplicity hơn scalability) \\
+    MongoDB thay vì MySQL & Tin nhắn linh hoạt theo loại, đọc nhanh nhờ dữ liệu nhúng & Không có ràng buộc khoá ngoại; phải tự giữ nhất quán & Mẫu truy cập chủ yếu là ``đọc một hội thoại'' \\
+    Kiểm tra nội dung file khi upload & Chặn file độc đổi tên & Thêm thời gian xử lý mỗi lần upload & Security hơn performance cho dữ liệu riêng tư \\
+    Lưu file trên ổ đĩa thay vì S3 & Miễn phí, không cấu hình & Mất file nếu mất máy; không chia sẻ giữa nhiều server & Mọi thao tác file nằm trong \code{StorageService}, đổi sang S3 chỉ sửa một chỗ \\
+    Token hạn 8 giờ, không lưu phiên & Stateless, không cần bảng phiên & Không thu hồi được từng token & Bù lại: guard kiểm tra trạng thái tài khoản mỗi request, khoá tài khoản có hiệu lực ngay \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\paragraph{Cohesion.} Mỗi module có \emph{functional cohesion}: mọi thành phần phục vụ một nghiệp vụ (ví dụ \code{conversations/} gồm schema, service, resolver, DTO của hội thoại). Ngoại lệ có ý thức là \code{seed/}: \emph{temporal cohesion}, chỉ gồm việc chạy lúc khởi động.
+
+\paragraph{Coupling đo được.} Nhóm đếm import giữa 8 module backend: $C_e$ là số module mà nó phụ thuộc, $C_a$ là số module phụ thuộc vào nó, và
+\begin{equation}
+  I = \frac{C_e}{C_e + C_a}.
+\end{equation}
+
+Hình~\ref{fig:components} vẽ toàn bộ 24 phụ thuộc đo được. Module càng ổn định càng nằm thấp: mũi tên chủ yếu đi từ trên xuống, tức module điều phối phụ thuộc vào module nền móng, đúng hướng mà Stable Dependencies Principle khuyên~\cite{martin2017clean}.
+
+\begin{figure}[!htb]
+  \centering
+  \begin{tikzpicture}[
+      mod/.style={draw=black!55, rounded corners=3pt, fill=white, align=center, font=\footnotesize, minimum width=2.4cm, minimum height=0.8cm, inner sep=2pt},
+      hot/.style={mod, draw=bkblue, thick, fill=bkblue!10},
+      dep/.style={->, >=Stealth, draw=black!35},
+      cyc/.style={->, >=Stealth, draw=red!70!black, thick}]
+    \node[mod] (seed) at (-3.2,3.3) {\code{seed}\\{\scriptsize $I = 1{,}00$}};
+    \node[mod] (msg)  at ( 3.2,3.3) {\code{messages}\\{\scriptsize $I = 0{,}86$}};
+    \node[hot] (sto)  at (-5.0,1.5) {\code{storage}\\{\scriptsize $I = 0{,}60$}};
+    \node[hot] (conv) at ( 0.0,1.5) {\code{conversations}\\{\scriptsize $I = 0{,}57$}};
+    \node[hot] (rt)   at ( 5.0,1.5) {\code{realtime}\\{\scriptsize $I = 0{,}50$}};
+    \node[mod] (act)  at (-2.6,-0.4) {\code{activities}\\{\scriptsize $I = 0{,}29$}};
+    \node[mod] (auth) at ( 2.6,-0.4) {\code{auth}\\{\scriptsize $I = 0{,}29$}};
+    \node[mod] (usr)  at ( 0.0,-2.3) {\code{users}\\{\scriptsize $I = 0{,}00$}};
+    \begin{scope}[on background layer]
+      % seed
+      \draw[dep] (seed) -- (msg);  \draw[dep] (seed) -- (conv); \draw[dep] (seed) -- (sto);
+      \draw[dep] (seed) -- (act);  \draw[dep] (seed) to[bend right=40] (usr);
+      % messages
+      \draw[dep] (msg) -- (conv);  \draw[dep] (msg) -- (rt);   \draw[dep] (msg) to[bend right=12] (sto);
+      \draw[dep] (msg) to[bend left=14] (act); \draw[dep] (msg) -- (auth); \draw[dep] (msg) to[bend left=40] (usr);
+      % middle row
+      \draw[dep] (sto) -- (conv);  \draw[dep] (sto) -- (act);  \draw[dep] (sto) to[bend right=10] (auth);
+      \draw[dep] (conv) -- (rt);   \draw[dep] (conv) -- (act); \draw[dep] (conv) -- (auth); \draw[dep] (conv) -- (usr);
+      \draw[dep] (rt) -- (auth);   \draw[dep] (rt) to[bend left=30] (usr);
+      % base
+      \draw[dep] (act) -- (usr);   \draw[dep] (auth) -- (usr);
+    \end{scope}
+    \draw[cyc] (act.east) to[bend left=18] (auth.west);
+    \draw[cyc] (auth.west) to[bend left=18] (act.east);
+    \node[font=\scriptsize, text=red!70!black, fill=white, inner sep=1pt] at (0,-1.05) {vòng phụ thuộc};
+  \end{tikzpicture}
+  \caption{Component diagram của 8 module backend (mũi tên: ``phụ thuộc vào''). Khung xanh: 3 module có $0{,}3 < I < 0{,}7$; đỏ: vòng phụ thuộc \code{auth} $\leftrightarrow$ \code{activities}.}
+  \label{fig:components}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \pgfkeys{/pgf/number format/.cd, use comma}
+  \begin{tikzpicture}
+    \begin{axis}[
+        xbar, bar shift=0pt, bar width=9pt,
+        width=0.82\linewidth, height=7.2cm,
+        xmin=0, xmax=1.12, clip=false,
+        set layers,
+        symbolic y coords={seed, messages, storage, conversations, realtime, auth, activities, users},
+        ytick={seed, messages, storage, conversations, realtime, auth, activities, users},
+        yticklabel style={font=\small\ttfamily},
+        enlarge y limits=0.09,
+        xtick={0, 0.3, 0.7, 1}, xmajorgrids, grid style={black!12},
+        xlabel={Instability $I$ (0 = ổn định, 1 = không ổn định)},
+        xlabel style={font=\small},
+        axis x line*=bottom, axis y line*=left,
+        nodes near coords,
+        nodes near coords style={font=\footnotesize, /pgf/number format/.cd, fixed, fixed zerofill, precision=2, use comma},
+      ]
+      \begin{pgfonlayer}{axis background}
+        \fill[black!7] ({axis cs:0.3,users} |- {rel axis cs:0,0}) rectangle ({axis cs:0.7,users} |- {rel axis cs:0,1});
+      \end{pgfonlayer}
+      \node[font=\footnotesize, text=black!60, above] at ({axis cs:0.5,users} |- {rel axis cs:0,1}) {vùng nên tránh (Chương 3)};
+      \addplot[fill=black!35, draw=none] coordinates {(1,seed) (0.86,messages) (0.29,auth) (0.29,activities) (0,users)};
+      \addplot[fill=bkblue!75, draw=none] coordinates {(0.60,storage) (0.57,conversations) (0.50,realtime)};
+    \end{axis}
+  \end{tikzpicture}
+  \caption{Ba module nằm trong vùng Instability nên tránh ($0{,}3 < I < 0{,}7$). Số liệu: đếm import giữa các module trong \code{chatter-backend/src}, ngày 20/11/2026.}
+  \label{fig:instability}
+\end{figure}
+
+\begin{table}[H]
+  \centering
+  \small
+  \caption{Coupling giữa các module backend (số liệu của Hình~\ref{fig:instability}).}
+  \label{tab:coupling}
+  \begin{tabularx}{\linewidth}{lccY}
+    \toprule
+    \textbf{Module} & \textbf{$C_e$} & \textbf{$C_a$} & \textbf{Phụ thuộc vào} \\
+    \midrule
+    \code{users} & 0 & 6 & (không) \\
+    \code{activities} & 2 & 5 & auth, users \\
+    \code{auth} & 2 & 5 & users, activities \\
+    \code{realtime} & 2 & 2 & auth, users \\
+    \code{conversations} & 4 & 3 & auth, users, activities, realtime \\
+    \code{storage} & 3 & 2 & auth, conversations, activities \\
+    \code{messages} & 6 & 1 & auth, conversations, storage, users, activities, realtime \\
+    \code{seed} & 5 & 0 & conversations, messages, storage, users, activities \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+Nhận xét theo ngưỡng của Chương 3 ($I$ nên nằm trong 0--0,3 hoặc 0,7--1):
+\begin{itemize}
+  \item \textbf{Tốt:} \code{users}, \code{auth}, \code{activities} ổn định ($I \le 0{,}3$), đúng với vai trò nền móng mà module khác dựa vào. \code{messages} và \code{seed} không ổn định ($I \ge 0{,}7$), đúng với vai trò điều phối ở ngoài cùng. Mọi $C_e$ đều $\le 6$, dưới xa ngưỡng 20.
+  \item \textbf{Cần cải thiện:} \code{realtime}, \code{conversations}, \code{storage} nằm ở vùng giữa (0,5--0,6) mà Chương 3 khuyên tránh.
+  \item \textbf{Vòng phụ thuộc:} \code{auth} $\leftrightarrow$ \code{activities}. \code{auth} ghi nhật ký đăng nhập vào \code{activities}, còn \code{activities} dùng guard của \code{auth}.
+\end{itemize}
+
+\paragraph{Abstractness và main sequence.} Backend không có abstract class hay interface hành vi nào; 11 interface/type đang có chỉ là kiểu dữ liệu. Vậy $A \approx 0$ cho mọi module, và khoảng cách tới main sequence~\cite{martin2017clean}
+\begin{equation}
+  D = |A + I - 1| \approx 1 - I.
+\end{equation}
+\code{users} ($D \approx 1$) rơi vào \textbf{zone of pain}: cụ thể, ổn định, và 6 module phụ thuộc vào nó, nên sửa nó rất tốn kém. Hướng sửa (cũng là DIP còn thiếu ở Bảng~\ref{tab:solid}): đặt interface như \code{UserDirectory}, \code{ActivityRecorder} để module khác phụ thuộc vào đó. Cách này vừa tăng $A$, vừa cắt vòng \code{auth} $\leftrightarrow$ \code{activities}.
+
+\paragraph{Connascence.}
+\begin{table}[H]
+  \centering
+  \small
+  \caption{Các loại connascence trong Chatter.}
+  \label{tab:connascence}
+  \begin{tabularx}{\linewidth}{P{2.8cm}YY}
+    \toprule
+    \textbf{Loại} & \textbf{Ví dụ trong Chatter} & \textbf{Cách kiểm soát} \\
+    \midrule
+    Name (yếu nhất, mong muốn) & Web, mobile và backend dùng chung tên trường GraphQL, tên sự kiện \code{message.created} & Schema GraphQL sinh từ code (\code{schema.gql}) \\
+    Type & Enum \code{MessageKind} (TEXT, IMAGE, \dots) dùng chung client--server & GraphQL kiểm tra kiểu mỗi request \\
+    Position $\rightarrow$ Name & Thay vì nhiều tham số theo thứ tự, mutation nhận một object input có tên trường & Giảm connascence mạnh xuống yếu \\
+    Algorithm & Ký và kiểm tra token/URL tải file phải cùng thuật toán HMAC-SHA256 & Giữ locality: cả hai đầu nằm trong cùng một class \\
+    Execution & Phải lưu tin trước rồi mới phát sự kiện socket & Cả hai bước nằm trong một hàm của \code{MessagesService} \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\subsection{Chương 4: Kiểu kiến trúc}
+
+\paragraph{Monolithic so với distributed.} Backend là một deployment unit (monolith). Như vậy nhóm tránh được distributed logging, distributed transaction và versioning hợp đồng giữa các service. Tuy vậy, client và server vẫn nối qua mạng, nên 8 ngộ nhận của hệ phân tán~\cite{richards2020fundamentals} vẫn được xử lý ở ranh giới đó (Bảng~\ref{tab:fallacies}).
+
+\begin{table}[H]
+  \centering
+  \small
+  \caption{Cách Chatter xử lý 8 ngộ nhận của hệ phân tán.}
+  \label{tab:fallacies}
+  \begin{tabularx}{\linewidth}{P{3.6cm}Y}
+    \toprule
+    \textbf{Ngộ nhận} & \textbf{Cách xử lý trong Chatter} \\
+    \midrule
+    1. Mạng luôn tin cậy & Socket.IO tự kết nối lại; lưu trước rồi mới phát nên mất sóng không mất tin \\
+    2. Độ trễ bằng 0 & Đẩy sự kiện qua WebSocket thay vì polling; một query GraphQL lấy đủ dữ liệu một màn hình \\
+    3. Băng thông vô hạn & Phân trang lịch sử tin; giới hạn 10/25/50\,MB; client chọn đúng trường cần \\
+    4. Mạng an toàn & Token trên mọi request và kết nối socket; URL file có chữ ký và hạn dùng; backend và MongoDB không mở ra Internet \\
+    5. Topology không đổi & Client đọc địa chỉ server từ cấu hình; app mobile có màn hình đổi server ngay trong app \\
+    6. Chỉ một quản trị viên & Toàn bộ hạ tầng mô tả bằng code (Docker Compose, script EC2, workflow), ai trong nhóm cũng dựng lại được \\
+    7. Chi phí truyền tải bằng 0 & Một server EC2 nhỏ, không dịch vụ trả phí theo lưu lượng; script xoá hết tài nguyên sau demo \\
+    8. Mạng đồng nhất & Web, mobile (Wi-Fi, 4G, tunnel Expo) cùng giao thức HTTP/WebSocket chuẩn qua một cổng Nginx \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\paragraph{Layered architecture.} Backend dùng 4 lớp đóng (Mục~\ref{sec:layers}). Về \emph{architecture sinkhole}: chỉ vài truy vấn đọc đơn giản (\code{me}, \code{health}) đi xuyên các lớp mà không xử lý gì. Phần lớn thao tác đều có logic ở lớp Business (kiểm tra thành viên, vai trò, giới hạn), nên layered vẫn là lựa chọn phù hợp theo quy tắc 80-20.
+
+\paragraph{Pipeline.} Hai chỗ dùng mô hình pipes and filters:
+\begin{itemize}
+  \item Thống kê dùng MongoDB aggregation pipeline: \code{\$match} (tester) $\rightarrow$ \code{\$group} (transformer) $\rightarrow$ \code{\$sort} $\rightarrow$ kết quả (consumer).
+  \item CI/CD là một pipeline: lint $\rightarrow$ test $\rightarrow$ build $\rightarrow$ deploy $\rightarrow$ health check. Mỗi bước chỉ chạy khi bước trước thành công.
+\end{itemize}
+
+\paragraph{Microkernel.} Hệ thống không theo microkernel, nhưng mượn hai ý tưởng của nó:
+\begin{itemize}
+  \item \textbf{Plug-in tuỳ chọn:} \code{ActivitiesService} (thống kê) và \code{RealtimeGateway} được inject dạng \code{@Optional} (thống kê vào 4 service, realtime vào 2 service). Lõi chat vẫn chạy khi không có hai thành phần này, đúng tinh thần ``plug-in mở rộng lõi''.
+  \item \textbf{Registry:} \code{CONTENT\_SIGNATURES} là một registry đơn giản dạng map (loại MIME $\rightarrow$ hàm kiểm tra), giống registry trong microkernel.
+\end{itemize}
+
+% =====================================================================
+\section{Code}
+\label{sec:code}
+
+Mã nguồn gồm 3 ứng dụng trong một repo; backend có 8 module nghiệp vụ, khoảng 5.000 dòng TypeScript (không tính test).
+
+\begin{table}[H]
+  \centering
+  \small
+  \begin{tabularx}{\linewidth}{lY}
+    \toprule
+    \textbf{Thư mục} & \textbf{Nội dung} \\
+    \midrule
+    \code{chatter-backend/} & NestJS: GraphQL, REST upload, Socket.IO; Dockerfile build và chạy unit test ngay trong image \\
+    \code{chatter-ui/} & React 19 + Material UI; Nginx vừa phục vụ web vừa làm cổng vào cho API \\
+    \code{chatter-mobile/} & React Native + Expo (nhánh \code{feature/mobile-app}), cũng chạy được dạng web ở cổng 3001 \\
+    \code{scripts/} & Tạo EC2, deploy, xoá tài nguyên AWS \\
+    \code{.github/workflows/} & CI và release hằng tuần \\
+    \code{docs/} & Đề bài, mô hình dữ liệu, báo cáo kiến trúc \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\begin{table}[H]
+  \centering
+  \small
+  \caption{Các module backend (số dòng không tính file test).}
+  \label{tab:modules}
+  \begin{tabularx}{\linewidth}{lrY}
+    \toprule
+    \textbf{Module} & \textbf{Số dòng} & \textbf{Thành phần chính} \\
+    \midrule
+    \code{conversations} & 1.169 & Hội thoại 1-1 và nhóm, thành viên, vai trò, đã đọc, quản trị nhóm \\
+    \code{messages} & 903 & Gửi 5 loại tin, cảm xúc, thu hồi, phân trang theo cursor \\
+    \code{activities} & 734 & Ghi nhật ký, 16 bước aggregation cho thống kê \\
+    \code{users} & 673 & Tài khoản, hồ sơ, danh bạ, băm mật khẩu \code{scrypt} \\
+    \code{storage} & 642 & Kiểm tra loại, dung lượng và nội dung file; URL có chữ ký; phát video theo HTTP Range \\
+    \code{auth} & 475 & Đăng ký/đăng nhập, token HMAC-SHA256, \code{AuthGuard}, \code{AdminGuard} \\
+    \code{realtime} & 232 & Gateway Socket.IO: phòng theo hội thoại và người dùng, online, đang gõ \\
+    \code{seed} & 207 & Dữ liệu demo: 4 tài khoản, hội thoại mẫu, 7 ngày hoạt động \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\textbf{Frontend web} chia theo màn hình: \code{auth/} (đăng nhập, đăng ký, dashboard), \code{chat/} (khung chat 5 loại tin, thông tin nhóm), \code{contacts/}, \code{profile/}, \code{analytics/}, \code{admin/}. Ba service dùng chung: \code{graphql.ts}, \code{uploads.ts}, \code{realtime.ts}.
+
+\textbf{Tài khoản demo} (tự tạo khi khởi động): \code{admin@chatter.vn} / \code{Admin@123456}; \code{minh.nguyen@chatter.vn}, \code{lan.tran@chatter.vn}, \code{huy.le@chatter.vn} / \code{Password@123}.
+
+% =====================================================================
+\section{Test}
+\label{sec:test}
+
+Hệ thống có 78 test tự động, tất cả đều pass và chạy lại ở mỗi lần push; mỗi yêu cầu của đề có ít nhất một test end-to-end chứng minh.
+
+\begin{table}[H]
+  \centering
+  \small
+  \caption{Các tầng kiểm thử.}
+  \label{tab:testlevels}
+  \begin{tabularx}{\linewidth}{lP{3.4cm}Yr}
+    \toprule
+    \textbf{Tầng} & \textbf{Công cụ} & \textbf{Phạm vi} & \textbf{Số test} \\
+    \midrule
+    Unit (backend) & Vitest, mock qua DI & Service: tài khoản, xác thực, token, hội thoại, tin nhắn, thống kê, kiểm tra file & 43 \\
+    End-to-end (backend) & Vitest + HTTP + \code{socket.io-client}, MongoDB thật & Toàn bộ app qua API như người dùng thật: cả 3 nhóm yêu cầu, phân quyền, realtime & 29 \\
+    Component (web) & Jest + React Testing Library & Form đăng nhập/đăng ký, tạo chat 1-1 và nhóm & 6 \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\begin{table}[H]
+  \centering
+  \small
+  \caption{Đối chiếu yêu cầu với test end-to-end.}
+  \label{tab:e2e}
+  \begin{tabularx}{\linewidth}{P{3cm}Y}
+    \toprule
+    \textbf{Yêu cầu} & \textbf{Test chứng minh} \\
+    \midrule
+    FR-1 Tài khoản & Đăng nhập đúng/sai mật khẩu; từ chối token sai; sửa hồ sơ; tìm người dùng; danh bạ; admin khoá tài khoản thì cả đăng nhập lẫn token cũ đều bị chặn \\
+    FR-2 Nhóm & Tạo nhóm, thêm thành viên, phó nhóm, đổi tên; thành viên bị xoá không đọc được nhóm; thành viên thường không xoá được trưởng nhóm; admin đóng nhóm \\
+    FR-3 Chat (chạy cho cả 1-1 và nhóm) & Gửi text và thả cảm xúc; gửi ảnh, video, tài liệu và người kia tải về đúng từng byte; gửi sticker; người nhận thấy đủ 5 loại; chỉ người gửi thu hồi được; nhận tin realtime qua Socket.IO \\
+    FR-4 Thống kê & Admin thấy số liệu cho cả 5 loại tin và 7 ngày; người thường bị từ chối; thống kê cá nhân đúng \\
+    Bảo mật & Từ chối file \code{.exe}, file \code{.exe} đổi tên thành \code{.png}, upload của người ngoài hội thoại; ngắt socket dùng token giả \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\textbf{Cách test được cô lập.} Mỗi lần chạy, test end-to-end tạo một database riêng \code{chatter\_e2e\_<timestamp>} và một thư mục upload tạm, rồi xoá cả hai khi chạy xong. Nhờ vậy test không đụng dữ liệu thật và chạy được song song trên CI.
+
+\textbf{Test đã tìm ra lỗi thật.} Hai lỗi bảo mật được phát hiện và sửa trong quá trình viết test:
+\begin{itemize}
+  \item Server tin vào loại file do trình duyệt khai, nên file \code{.exe} đổi tên thành \code{.png} được lưu như ảnh. Đã sửa bằng cách kiểm tra chữ ký đầu file (magic bytes).
+  \item Một unit test thỉnh thoảng fail (khoảng 1/16 lần chạy). Nguyên nhân: token bị sửa ký tự cuối đôi khi vẫn hợp lệ do cách giải mã base64url. Đã sửa bằng cách so sánh nguyên chuỗi chữ ký; test mới thử đủ 63 ký tự thay thế.
+\end{itemize}
+
+\textbf{Đo đặc tính responsiveness:} tin nhắn tới người nhận qua Socket.IO sau khoảng 32\,ms trên máy local, đạt tiêu chí $<150$\,ms ở Bảng~\ref{tab:chars}. Đây là một lần đo đơn lẻ, chưa phải kiểm thử tải.
+
+% =====================================================================
+\section{Deploy và release lên Cloud theo tuần}
+\label{sec:deploy}
+
+Hệ thống đang chạy trên AWS EC2 tại \url{http://3.26.48.153:3000}. Kiểm tra ngày 20/11/2026: health check trả về \code{ok}. Release hằng tuần được tự động hoá bằng GitHub Actions.
+
+\subsection{Đóng gói và triển khai}
+\begin{table}[H]
+  \centering
+  \small
+  \caption{Các container trên EC2.}
+  \label{tab:containers}
+  \begin{tabularx}{\linewidth}{lP{3.2cm}P{2.9cm}Y}
+    \toprule
+    \textbf{Container} & \textbf{Image} & \textbf{Cổng} & \textbf{Ghi chú} \\
+    \midrule
+    \code{chatter-ui} & Nginx + bản build React & 80, 3000 (mở ra Internet) & Cổng vào duy nhất; chuyển \code{/graphql}, \code{/uploads}, \code{/socket.io} vào backend \\
+    \code{chatter-mobile} & Nginx + bản web của app Expo & 3001 & Mở bằng trình duyệt điện thoại, không cần cài app \\
+    \code{chatter-backend} & Node 22, multi-stage & 4000 (chỉ nội bộ máy chủ) & Image chỉ được tạo khi unit test pass \\
+    \code{mongodb} & mongo:7 & 27017 (chỉ nội bộ máy chủ) & Dữ liệu nằm trên volume \code{mongodb\_data} \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+Các chiến thuật availability: mỗi container có health check; container sau chỉ khởi động khi container trước đã khoẻ (\code{depends\_on: service\_healthy}); \code{restart: unless-stopped}; file upload nằm trên volume riêng.
+
+Script \code{scripts/provision-and-deploy-ec2.ps1} tạo toàn bộ hạ tầng bằng một lệnh: security group, SSH key, máy Ubuntu 24.04, swap 2\,GB, Docker, rồi deploy. \code{scripts/destroy-ec2.ps1} xoá hết sau khi demo, để không phát sinh chi phí.
+
+\subsection{CI/CD trên GitHub Actions}
+\textbf{CI} (\code{.github/workflows/ci.yml}) chạy ở mọi lần push và pull request. Ba job chạy song song, mỗi job khoảng 45 giây:
+\begin{enumerate}
+  \item Backend: cài dependency $\rightarrow$ lint $\rightarrow$ 43 unit test $\rightarrow$ 29 test end-to-end (GitHub bật sẵn một MongoDB tạm) $\rightarrow$ build.
+  \item Frontend: cài dependency $\rightarrow$ kiểm tra TypeScript $\rightarrow$ 6 test $\rightarrow$ build.
+  \item Docker: kiểm tra file Compose $\rightarrow$ build image backend và frontend (chạy sau khi hai job trên pass).
+\end{enumerate}
+Cả hai lần CI đã chạy trên nhánh \code{feature/sa\_hungnlh} đều pass.
+
+\textbf{Release hằng tuần} (\code{.github/workflows/weekly-release.yml}) tự chạy lúc 10:00 thứ Sáu (giờ Việt Nam), hoặc chạy tay từ tab Actions:
+\begin{enumerate}
+  \item Chạy lại toàn bộ CI; có lỗi thì dừng, không deploy.
+  \item Đóng gói mã nguồn, gửi lên EC2 qua SSH, chạy \code{docker compose up}.
+  \item Gọi \code{\{ health \}} trên server thật; không trả lời trong 150 giây thì báo lỗi.
+  \item Tạo GitHub Release \code{release-YYYY-Www} kèm danh sách thay đổi trong tuần. Danh sách release này là bằng chứng cho yêu cầu ``release lên Cloud theo tuần''.
+\end{enumerate}
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[
+      cstep/.style={draw=black!50, rounded corners=3pt, align=center, font=\footnotesize, fill=white, text width=2.35cm, inner sep=3pt, minimum height=0.95cm},
+      start/.style={cstep, fill=black!5},
+      ok/.style={cstep, draw=bkblue, thick, fill=bkblue!8},
+      bad/.style={cstep, draw=red!60!black, fill=red!5},
+      dec/.style={draw=black!50, diamond, aspect=1.6, align=center, font=\footnotesize, inner sep=0.5pt, fill=white},
+      fl/.style={->, >=Stealth, draw=black!60, thick},
+      lab/.style={font=\scriptsize, text=black!65}]
+    % CI lane
+    \node[font=\small\bfseries, anchor=west] at (-1.3,1.7) {CI (\code{ci.yml}): mọi push và pull request};
+    \node[start] (push) at (0,0) {push /\\pull request};
+    \node[cstep] (be) at (3.4,0.62) {Backend: lint, 43 unit, 29 e2e, build};
+    \node[cstep] (fe) at (3.4,-0.75) {Frontend: tsc, 6 test, build};
+    \node[cstep] (dk) at (6.8,0) {Build Docker image};
+    \node[ok] (cipass) at (10.2,0) {CI pass};
+    \draw[fl] (push.east) -- (be.west); \draw[fl] (push.east) -- (fe.west);
+    \draw[fl] (be.east) -- (dk.west); \draw[fl] (fe.east) -- (dk.west);
+    \draw[fl] (dk) -- (cipass);
+    % release lane
+    \node[font=\small\bfseries, anchor=west] at (-1.3,-2.15) {Release (\code{weekly-release.yml}): thứ Sáu 10:00 hoặc chạy tay};
+    \node[start] (cron) at (0,-3.5) {lịch hằng tuần /\\chạy tay};
+    \node[cstep] (ci2) at (2.75,-3.5) {Chạy lại toàn bộ CI};
+    \node[dec] (d1) at (5.15,-3.5) {pass?};
+    \node[cstep] (dep) at (7.6,-3.5) {Deploy EC2:\\SSH + compose up};
+    \node[dec] (d2) at (10.05,-3.5) {health\\ok?};
+    \node[ok, text width=2.9cm] (rel) at (12.85,-3.5) {GitHub Release\\\code{release-YYYY-Www}};
+    \node[bad] (stop) at (7.6,-5.5) {Dừng, báo lỗi,\\không release};
+    \draw[fl] (cron) -- (ci2); \draw[fl] (ci2) -- (d1);
+    \draw[fl] (d1) -- node[lab, above] {có} (dep);
+    \draw[fl] (dep) -- (d2);
+    \draw[fl] (d2) -- node[lab, above] {có} (rel);
+    \draw[fl] (d1.south) |- node[lab, pos=0.25, left] {không} (stop.west);
+    \draw[fl] (d2.south) |- node[lab, pos=0.25, right] {không} (stop.east);
+  \end{tikzpicture}
+  \caption{Luồng CI/CD. Code chỉ lên Cloud khi toàn bộ test pass và server thật trả lời health check.}
+  \label{fig:cicd}
+\end{figure}
+
+Workflow release cần hai secret \code{EC2\_HOST} và \code{EC2\_SSH\_KEY}. GitHub chỉ chạy lịch hằng tuần sau khi workflow có trên nhánh \code{main}.
+\begin{itemize}[label=$\square$]
+  \item Merge \code{feature/sa\_hungnlh} vào \code{main}.
+  \item Thêm secret \code{EC2\_HOST} và \code{EC2\_SSH\_KEY} trong Settings $\rightarrow$ Secrets and variables $\rightarrow$ Actions.
+\end{itemize}
+
+% =====================================================================
+\section{Đánh giá, hạn chế và hướng phát triển}
+\label{sec:eval}
+
+Chatter đáp ứng đủ các yêu cầu của đề và đạt 6 đặc tính kiến trúc đã chọn. Điểm yếu lớn nhất là thiếu trừu tượng giữa các module, và khả năng mở rộng bị giới hạn ở một máy chủ.
+
+\subsection{Đối chiếu với đề bài}
+\begin{table}[H]
+  \centering
+  \small
+  \begin{tabularx}{\linewidth}{P{6cm}Y}
+    \toprule
+    \textbf{Yêu cầu của đề} & \textbf{Kết quả} \\
+    \midrule
+    Quản lý tài khoản, danh sách nhóm & Đạt (Bảng~\ref{tab:fr}, test ở Mục~\ref{sec:test}) \\
+    Chat 1-1 và nhóm: text, image, video, document, emotion & Đạt cả 5 loại, trên web và mobile \\
+    Thống kê hoạt động người dùng & Đạt, cho admin và cho từng người dùng \\
+    Requirement, design, code, test, deploy & Đạt (Mục~\ref{sec:req}--\ref{sec:deploy}) \\
+    Release lên Cloud theo tuần & Đã có trên EC2 và có workflow hằng tuần; cần merge vào \code{main} và thêm secret để lịch tự chạy \\
+    Backend Node.js, NoSQL; front-end web và mobile & Đạt \\
+    Trình bày giải pháp đã học & Mục~\ref{sec:solutions}, theo cả 4 chương \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\subsection{Hạn chế và hướng cải thiện}
+\begin{table}[H]
+  \centering
+  \small
+  \begin{tabularx}{\linewidth}{YYY}
+    \toprule
+    \textbf{Hạn chế} & \textbf{Hậu quả} & \textbf{Hướng cải thiện} \\
+    \midrule
+    Module \code{users} nằm trong zone of pain; DIP chưa đầy đủ & Sửa \code{users} ảnh hưởng 6 module & Đặt interface (\code{UserDirectory}, \code{ActivityRecorder}) giữa các module (Mục~\ref{sec:ch3}) \\
+    Vòng phụ thuộc \code{auth} $\leftrightarrow$ \code{activities} & Hai module phải sửa cùng nhau & Ghi nhật ký qua sự kiện nội bộ (event emitter) thay vì gọi trực tiếp \\
+    Socket.IO chỉ chạy một bản backend & Chạy nhiều bản thì sự kiện không tới đủ người nhận & Redis adapter cho Socket.IO, load balancer phía trước \\
+    File lưu trên ổ đĩa một máy & Mất máy là mất file & Chuyển \code{StorageService} sang S3 \\
+    Chưa có HTTPS; SSH mở cho mọi IP & Token đi trên đường truyền không mã hoá & Gắn domain và chứng chỉ TLS; giới hạn SSH theo IP của nhóm \\
+    Chưa kiểm thử tải & Chưa biết giới hạn số người dùng đồng thời & Chạy load test WebSocket trước khi mở rộng \\
+    Chưa có gọi video, đăng nhập QR, thông báo đẩy & Thiếu so với Zalo thật & WebRTC (dùng Socket.IO làm kênh signaling), QR qua WebSocket, FCM \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\subsection{Kết luận}
+Bài học lớn nhất của nhóm trùng với luật thứ nhất của kiến trúc: mọi lựa chọn đều là đánh đổi. Nhóm cố ý chọn modular monolith và bỏ scalability để đổi lấy sự đơn giản, phù hợp quy mô nhóm và thời hạn. Ranh giới module rõ ràng, lớp đóng và bộ test đầy đủ giúp hệ thống có thể tách thành service riêng sau này mà không phải viết lại nghiệp vụ. Các chỉ số coupling đo được cũng chỉ ra cụ thể cần sửa ở đâu trước khi làm việc đó.
+
+\nocite{bass2021practice, clements2010views}
+\bibliographystyle{plainnat}
+\bibliography{refs}
+
+\end{document}

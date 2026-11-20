@@ -200,11 +200,11 @@ E2E test tạo một database riêng tên `chatter_e2e_<thời điểm>` và xo�
 
 ## 9. Thành viên và phân công
 
-Đề bài yêu cầu nhóm 3–4 người, có nhóm trưởng và bảng phân công. Nhóm cần tự điền bảng này; cột "Commit chính" lấy từ lịch sử git.
+Nhóm 4 người, nhóm trưởng là Nguyễn Thị Linh Trang. Cột "Đóng góp chính" lấy từ lịch sử git.
 
-| Thành viên | Vai trò | Phụ trách | Commit chính |
+| Thành viên | MSSV | Vai trò | Đóng góp chính |
 | :--- | :--- | :--- | :--- |
-| *(điền tên)* | Nhóm trưởng | | |
-| Linh Trang | | | Đăng ký tài khoản (MongoDB), đăng nhập JWT, giao diện chat dashboard |
-| Nam Le | | | MVP Phase 1 (3 nhóm chức năng bắt buộc), deploy AWS EC2, client mobile |
-| hwnghoang | | | Khởi tạo React UI, NestJS, CI/CD, e2e test, báo cáo kiến trúc |
+| Nguyễn Thị Linh Trang | 2570344 | Nhóm trưởng | Đăng ký tài khoản (MongoDB), đăng nhập JWT, giao diện chat dashboard |
+| Lê Đức Hoàng Nam | *TODO* | Thành viên | MVP Phase 1 (3 nhóm chức năng bắt buộc), deploy AWS EC2, client mobile |
+| Nguyễn Lê Hoàng Hưng | 2570214 | Thành viên | Khởi tạo React UI và NestJS, CI/CD, e2e test, bảo mật upload và token, báo cáo kiến trúc |
+| Nguyễn Đinh Quang Khải | *TODO* | Thành viên | *TODO* |
