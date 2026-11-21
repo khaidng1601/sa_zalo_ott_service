@@ -84,7 +84,7 @@ if (-not $SgId -or $SgId -eq "None") {
     $SgId = (& $AwsCmd ec2 create-security-group `
         --region $Region `
         --group-name $SecurityGroupName `
-        --description "Security group for sa_zalo_ott_service (SSH 22, HTTP 80, UI 3000)" `
+        --description "Security group for sa_zalo_ott_service (SSH 22, HTTP 80, Web 3000, Mobile 3001)" `
         --vpc-id $VpcId `
         --query "GroupId" `
         --output text).Trim()
@@ -92,7 +92,7 @@ if (-not $SgId -or $SgId -eq "None") {
 
 $PrevEap = $ErrorActionPreference
 $ErrorActionPreference = "Continue"
-foreach ($Port in @(22, 80, 3000)) {
+foreach ($Port in @(22, 80, 3000, 3001)) {
     & $AwsCmd ec2 authorize-security-group-ingress `
         --region $Region `
         --group-id $SgId `
@@ -101,7 +101,7 @@ foreach ($Port in @(22, 80, 3000)) {
         --cidr "0.0.0.0/0" >$null 2>&1
 }
 $ErrorActionPreference = $PrevEap
-Write-Host "    Security Group ready: $SgId (TCP 22, 80, 3000 open)" -ForegroundColor Green
+Write-Host "    Security Group ready: $SgId (TCP 22, 80, 3000, 3001 open)" -ForegroundColor Green
 
 # 4. Ensure EC2 Key Pair
 Write-Host "==> Ensuring EC2 Key Pair '$KeyName'..." -ForegroundColor Cyan

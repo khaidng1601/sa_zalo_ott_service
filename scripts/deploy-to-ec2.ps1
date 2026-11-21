@@ -27,8 +27,10 @@ try {
     tar.exe -czf $ArchivePath `
         --exclude="node_modules" `
         --exclude=".git" `
+        --exclude=".expo" `
         --exclude="dist" `
         --exclude="build" `
+        --exclude="web-build" `
         --exclude="uploads" `
         --exclude="*.pem" `
         --exclude="*.tar.gz" `
@@ -112,8 +114,10 @@ if ($RemoteExit -ne 0) {
 
 Write-Host ""
 Write-Host "==========================================================" -ForegroundColor Green
-Write-Host " DEPLOYMENT COMPLETE!" -ForegroundColor Green
-Write-Host " Live App URL (Port 80):   http://$HostIp" -ForegroundColor Green
-Write-Host " Live App URL (Port 3000): http://${HostIp}:3000" -ForegroundColor Green
-Write-Host " GraphQL API Endpoint:     http://$HostIp/graphql" -ForegroundColor Green
+Write-Host " DEPLOYMENT COMPLETE! (Shared MongoDB + Realtime Backend)" -ForegroundColor Green
+Write-Host " Live Web App (Port 80):      http://$HostIp" -ForegroundColor Green
+Write-Host " Live Web App (Port 3000):    http://${HostIp}:3000" -ForegroundColor Green
+Write-Host " Live Mobile App (Port 3001): http://${HostIp}:3001" -ForegroundColor Green
+Write-Host " Expo Go Server URL:          http://${HostIp}:3000" -ForegroundColor Green
+Write-Host " GraphQL API Endpoint:        http://$HostIp/graphql" -ForegroundColor Green
 Write-Host "==========================================================" -ForegroundColor Green

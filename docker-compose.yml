@@ -62,6 +62,18 @@ services:
       chatter-backend:
         condition: service_healthy
 
+  chatter-mobile:
+    build:
+      context: ./chatter-mobile
+      dockerfile: Dockerfile
+    container_name: sa-zalo-mobile
+    restart: unless-stopped
+    ports:
+      - "${MOBILE_PORT:-3001}:80"
+    depends_on:
+      chatter-backend:
+        condition: service_healthy
+
 volumes:
   mongodb_data:
   backend_uploads:

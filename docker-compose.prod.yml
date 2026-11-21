@@ -11,3 +11,7 @@ services:
     ports: !override
       - "80:80"
       - "3000:80"
+
+  chatter-mobile:
+    ports: !override
+      - "3001:80"
