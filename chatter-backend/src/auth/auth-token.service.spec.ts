@@ -28,6 +28,18 @@ describe('AuthTokenService', () => {
     expect(() => service.verify(tampered)).toThrow('Invalid token');
   });
 
+  it('rejects every other spelling of the signature, not only most of them', () => {
+    const issued = service.issue(userId);
+    const body = issued.accessToken.slice(0, -1);
+    const lastChar = issued.accessToken.at(-1);
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+
+    for (const ch of alphabet) {
+      if (ch === lastChar) continue;
+      expect(() => service.verify(`${body}${ch}`)).toThrow('Invalid token');
+    }
+  });
+
   it('requires a strong configured secret', () => {
     const serviceWithoutSecret = new AuthTokenService(
       new ConfigService({ AUTH_JWT_SECRET: 'too-short' }),

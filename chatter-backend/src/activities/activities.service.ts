@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
-import { Model, type Connection } from 'mongoose';
+import { Model, Types, type Connection } from 'mongoose';
 import {
   ActiveGroupStat,
   ActivityStats,
@@ -317,15 +317,32 @@ export class ActivitiesService {
       );
       activeGroupsInRange = activeGroupEntries.length;
 
-      for (const entry of activeGroupEntries.slice(0, 5)) {
-        const memberCount = await membersCol.countDocuments({
-          conversationId: entry._id,
-          status: 'active',
-        });
+      const topEntries = activeGroupEntries.slice(0, 5);
+      const memberCounts = await membersCol
+        .aggregate<{ _id: string; memberCount: number }>([
+          {
+            $match: {
+              conversationId: { $in: topEntries.map((entry) => entry._id) },
+              status: 'active',
+            },
+          },
+          {
+            $group: {
+              _id: '$conversationId',
+              memberCount: { $sum: 1 },
+            },
+          },
+        ])
+        .toArray();
+      const memberCountByConversation = new Map(
+        memberCounts.map((entry) => [entry._id, entry.memberCount]),
+      );
+
+      for (const entry of topEntries) {
         topActiveGroups.push({
           conversationId: entry._id,
           title: groupTitleById.get(entry._id) ?? 'Nhóm',
-          memberCount,
+          memberCount: memberCountByConversation.get(entry._id) ?? 0,
           messageCount: entry.messageCount,
         });
       }
@@ -431,16 +448,18 @@ export class ActivitiesService {
     let groupsJoined = 0;
     let directChatsCount = 0;
     if (activeMemberships.length > 0) {
-      const allConvs = await convsCol
-        .find({})
+      const conversationIds = activeMemberships
+        .map((membership) => String(membership.conversationId))
+        .filter((id) => Types.ObjectId.isValid(id))
+        .map((id) => new Types.ObjectId(id));
+      const userConvs = await convsCol
+        .find({
+          _id: { $in: conversationIds },
+          closedAt: null,
+        })
         .project({ _id: 1, type: 1, closedAt: 1 })
         .toArray();
-      const memberConvSet = new Set(
-        activeMemberships.map((m) => String(m.conversationId)),
-      );
-      for (const conv of allConvs) {
-        if (conv.closedAt) continue;
-        if (!memberConvSet.has(String(conv._id))) continue;
+      for (const conv of userConvs) {
         if (conv.type === 'group') groupsJoined += 1;
         if (conv.type === 'direct') directChatsCount += 1;
       }

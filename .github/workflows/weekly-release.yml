@@ -1,0 +1,106 @@
+name: Weekly release to AWS EC2
+
+# Releases the stack to the cloud once a week (course requirement: "Release lên Cloud các module theo tuần").
+# Also runs on demand from the Actions tab.
+#
+# Required repository secrets (Settings → Secrets and variables → Actions):
+#   EC2_HOST     public IP or DNS name of the Ubuntu EC2 instance
+#   EC2_SSH_KEY  contents of the instance's private key (.pem)
+# Optional repository variable:
+#   EC2_USER     SSH user (default: ubuntu)
+
+on:
+  schedule:
+    - cron: "0 3 * * 5" # every Friday 10:00 Vietnam time (UTC+7)
+  workflow_dispatch:
+    inputs:
+      create_release:
+        description: "Create a GitHub Release for this deploy"
+        type: boolean
+        default: true
+
+concurrency:
+  group: weekly-release
+  cancel-in-progress: false
+
+permissions:
+  contents: write # tag + GitHub Release
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    name: Deploy to EC2
+    needs: ci
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      EC2_HOST: ${{ secrets.EC2_HOST }}
+      EC2_USER: ${{ vars.EC2_USER || 'ubuntu' }}
+    steps:
+      - name: Check deploy secrets
+        env:
+          HAS_KEY: ${{ secrets.EC2_SSH_KEY != '' }}
+        run: |
+          if [ -z "$EC2_HOST" ] || [ "$HAS_KEY" != "true" ]; then
+            echo "::error::Set the EC2_HOST and EC2_SSH_KEY repository secrets to enable deploys."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - name: Set up SSH key
+        env:
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$EC2_SSH_KEY" > ~/.ssh/ec2.pem
+          chmod 600 ~/.ssh/ec2.pem
+          ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+      # Same bundle and remote steps as scripts/deploy-to-ec2.ps1.
+      - name: Package source bundle
+        run: |
+          tar -czf /tmp/sa_zalo_ott_bundle.tar.gz \
+            --exclude=node_modules --exclude=.git --exclude=dist --exclude=build \
+            --exclude=uploads --exclude='*.pem' --exclude='*.tar.gz' --exclude=.env .
+
+      - name: Upload and start containers
+        run: |
+          SSH="ssh -i $HOME/.ssh/ec2.pem -o BatchMode=yes $EC2_USER@$EC2_HOST"
+          $SSH "mkdir -p ~/sa_zalo_ott_service"
+          scp -i ~/.ssh/ec2.pem -o BatchMode=yes /tmp/sa_zalo_ott_bundle.tar.gz "$EC2_USER@$EC2_HOST:~/"
+          $SSH "tar -xzf ~/sa_zalo_ott_bundle.tar.gz -C ~/sa_zalo_ott_service && rm -f ~/sa_zalo_ott_bundle.tar.gz"
+          $SSH "bash ~/sa_zalo_ott_service/scripts/ec2-bootstrap.sh"
+
+      # ec2-bootstrap.sh only prints the health result; fail the job here if the app is not up.
+      - name: Verify the live app
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS "http://$EC2_HOST/graphql" -H 'Content-Type: application/json' \
+                 -d '{"query":"{ health }"}' | grep -q '"ok"'; then
+              echo "Live at http://$EC2_HOST"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::Health check failed at http://$EC2_HOST/graphql"
+          exit 1
+
+      - name: Tag weekly release
+        if: github.event_name == 'schedule' || inputs.create_release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="release-$(date -u +%G-W%V)"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "$TAG already exists; deploy finished without a new release."
+          else
+            gh release create "$TAG" --target "$GITHUB_SHA" --generate-notes \
+              --title "Weekly release $(date -u +%G-W%V)"
+          fi
+
+      - name: Remove SSH key
+        if: always()
+        run: rm -f ~/.ssh/ec2.pem

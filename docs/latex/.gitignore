@@ -1,0 +1,13 @@
+# LaTeX build files (keep the .tex sources and the final PDF)
+*.aux
+*.bbl
+*.blg
+*.log
+*.out
+*.toc
+*.lof
+*.lot
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.xdv

@@ -1,4 +1,9 @@
 allowBuilds:
   core-js: false
   core-js-pure: false
+# Create React App's ESLint setup breaks with pnpm's default symlinked layout.
 nodeLinker: hoisted
+overrides:
+  # nwsapi 2.2.13+ breaks MUI tests under react-scripts' jsdom 16
+  # ("Failed to execute 'contains' on 'Node'"). Test-only dependency.
+  nwsapi: 2.2.12
